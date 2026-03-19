@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "name": "Ana Torres",
+    "email": "ana.torres@duocuc.cl",
+    "role": "student"
+  },
+  {
+    "id": 2,
+    "name": "Carlos Moya",
+    "email": "carlos.moya@duocuc.cl",
+    "role": "teacher"
+  },
+  {
+    "id": 3,
+    "name": "Josefina Rojas",
+    "email": "josefina.rojas@duocuc.cl",
+    "role": "student"
+  },
+  {
+    "id": 4,
+    "name": "Maria Lopez",
+    "email": "maria.lopez@duocuc.cl",
+    "role": "student"
+  },
+  {
+    "id": 5,
+    "name": "Maria Lopez",
+    "email": "maria.lopez@duocuc.cl",
+    "role": "student"
+  },
+  {
+    "id": 6,
+    "name": "Maria Lopez",
+    "email": "maria.lopez@duocuc.cl",
+    "role": "student"
+  }
+]

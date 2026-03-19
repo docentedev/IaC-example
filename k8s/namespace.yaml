@@ -1,0 +1,8 @@
+# Version de API de Kubernetes para objetos basicos como Namespace.
+apiVersion: v1
+# Tipo de recurso que vamos a crear.
+kind: Namespace
+# Metadatos del recurso.
+metadata:
+  # Nombre del namespace donde viviran los microservicios.
+  name: microservicios

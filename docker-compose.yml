@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  products-java:
+    build:
+      context: ./products-java
+      dockerfile: Dockerfile
+    container_name: products-java
+    ports:
+      - "4020:4020"
+    environment:
+      - SERVER_PORT=4020
+
+  users-nodejs:
+    build:
+      context: ./users-nodejs
+      dockerfile: Dockerfile
+    container_name: users-nodejs
+    ports:
+      - "4021:4021"
+    environment:
+      - PORT=4021
+    volumes:
+      - ./users-nodejs/data/data.json:/app/data/data.json

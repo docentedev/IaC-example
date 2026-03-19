@@ -1,0 +1,22 @@
+# API para recursos basicos como PersistentVolumeClaim.
+apiVersion: v1
+# Tipo de objeto: PersistentVolumeClaim (solicitud de almacenamiento persistente).
+kind: PersistentVolumeClaim
+# Metadatos del PVC.
+metadata:
+  # Nombre del PVC, luego se referencia desde el Deployment.
+  name: users-data-pvc
+  # Namespace donde se crea el PVC.
+  namespace: microservicios
+# Especificacion del almacenamiento solicitado.
+spec:
+  # Modo de acceso al volumen.
+  accessModes:
+    # ReadWriteOnce: se monta en modo lectura/escritura por un solo nodo.
+    - ReadWriteOnce
+  # Recursos solicitados al sistema de storage del cluster.
+  resources:
+    # Cantidad minima de almacenamiento requerida.
+    requests:
+      # Tamano solicitado para persistir el archivo data.json y crecimiento basico.
+      storage: 1Gi

@@ -1,0 +1,84 @@
+# API para recursos de tipo Deployment.
+apiVersion: apps/v1
+# Tipo de objeto: Deployment (administra replicas de Pods).
+kind: Deployment
+# Metadatos del Deployment.
+metadata:
+  # Nombre del Deployment.
+  name: products-java
+  # Namespace donde se crea el Deployment.
+  namespace: microservicios
+  # Etiquetas del Deployment (utiles para organizar y filtrar recursos).
+  labels:
+    # Etiqueta principal de la aplicacion.
+    app: products-java
+# Especificacion del comportamiento del Deployment.
+spec:
+  # Cantidad de Pods deseados.
+  replicas: 1
+  # Selector que indica que Pods administra este Deployment.
+  selector:
+    # Debe coincidir con labels del template.
+    matchLabels:
+      # Label que identifica los Pods de products-java.
+      app: products-java
+  # Plantilla del Pod que se creara.
+  template:
+    # Metadatos del Pod.
+    metadata:
+      # Labels del Pod (deben coincidir con el selector).
+      labels:
+        # Label usado por Deployment y Service para ubicar este Pod.
+        app: products-java
+    # Especificacion del Pod.
+    spec:
+      # Lista de contenedores dentro del Pod.
+      containers:
+        # Definicion del contenedor principal.
+        - name: products-java
+          # Imagen local del contenedor construida en tu maquina.
+          image: products-java:1.0
+          # Usa imagen local si existe; solo descarga si no esta presente.
+          imagePullPolicy: IfNotPresent
+          # Puertos expuestos por el contenedor.
+          ports:
+            # Puerto donde escucha la app Spring Boot dentro del contenedor.
+            - containerPort: 4020
+          # Variables de entorno del contenedor.
+          env:
+            # Nombre de la variable de entorno para el puerto de Spring Boot.
+            - name: SERVER_PORT
+              # Valor de la variable de entorno.
+              value: "4020"
+# Separador YAML para definir otro recurso en el mismo archivo.
+---
+# API para recursos de red basicos como Service.
+apiVersion: v1
+# Tipo de objeto: Service (expone Pods dentro del cluster).
+kind: Service
+# Metadatos del Service.
+metadata:
+  # Nombre del Service.
+  name: products-java
+  # Namespace donde se crea el Service.
+  namespace: microservicios
+  # Etiquetas del Service.
+  labels:
+    # Etiqueta principal del Service.
+    app: products-java
+# Especificacion de como enrutar trafico al Pod.
+spec:
+  # Selector para encontrar los Pods destino.
+  selector:
+    # Debe coincidir con label del Pod template.
+    app: products-java
+  # Definicion de puertos del Service.
+  ports:
+    # Mapeo de un puerto del Service hacia el contenedor.
+    - protocol: TCP
+      # Puerto del Service dentro del cluster.
+      port: 4020
+      # Puerto del contenedor al que se enviara el trafico.
+      targetPort: 4020
+  # Tipo ClusterIP: accesible solo dentro del cluster.
+  type: ClusterIP

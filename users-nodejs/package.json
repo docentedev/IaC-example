@@ -1,0 +1,13 @@
+{
+  "name": "users-nodejs",
+  "version": "1.0.0",
+  "description": "Microservicio REST de usuarios con Express",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node src/app.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}

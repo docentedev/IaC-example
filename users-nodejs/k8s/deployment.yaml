@@ -1,0 +1,98 @@
+# API para recursos de tipo Deployment.
+apiVersion: apps/v1
+# Tipo de objeto: Deployment.
+kind: Deployment
+# Metadatos del Deployment.
+metadata:
+  # Nombre del Deployment.
+  name: users-nodejs
+  # Namespace donde se despliega este microservicio.
+  namespace: microservicios
+  # Etiquetas del Deployment.
+  labels:
+    # Etiqueta principal para identificar esta app.
+    app: users-nodejs
+# Especificacion del Deployment.
+spec:
+  # Numero de replicas deseadas.
+  replicas: 1
+  # Selector que define que Pods administra el Deployment.
+  selector:
+    # Debe coincidir con labels del Pod template.
+    matchLabels:
+      # Label objetivo de este Deployment.
+      app: users-nodejs
+  # Plantilla del Pod que se creara.
+  template:
+    # Metadatos del Pod.
+    metadata:
+      # Labels del Pod.
+      labels:
+        # Label usado por selector y Service para localizar el Pod.
+        app: users-nodejs
+    # Especificacion del Pod.
+    spec:
+      # Contenedores del Pod.
+      containers:
+        # Contenedor del microservicio users.
+        - name: users-nodejs
+          # Imagen local del contenedor construida en tu maquina.
+          image: users-nodejs:1.0
+          # Usa imagen local si existe; solo descarga si no esta presente.
+          imagePullPolicy: IfNotPresent
+          # Puertos expuestos por el contenedor.
+          ports:
+            # Puerto interno donde escucha Express.
+            - containerPort: 4021
+          # Variables de entorno para el contenedor.
+          env:
+            # Puerto de ejecucion de la app Node.
+            - name: PORT
+              # Valor configurado para el puerto.
+              value: "4021"
+          # Montajes de volumen dentro del contenedor.
+          volumeMounts:
+            # Referencia al volumen definido abajo en spec.volumes.
+            - name: users-data
+              # Ruta donde la app espera encontrar data.json.
+              mountPath: /app/data
+      # Volumenes disponibles para el Pod.
+      volumes:
+        # Nombre del volumen que luego se monta en volumeMounts.
+        - name: users-data
+          # Tipo de volumen: PVC existente.
+          persistentVolumeClaim:
+            # Nombre del claim que aporta almacenamiento persistente.
+            claimName: users-data-pvc
+# Separador YAML para definir un segundo recurso en este mismo archivo.
+---
+# API para Service.
+apiVersion: v1
+# Tipo de objeto: Service.
+kind: Service
+# Metadatos del Service.
+metadata:
+  # Nombre del Service.
+  name: users-nodejs
+  # Namespace donde vive el Service.
+  namespace: microservicios
+  # Etiquetas del Service.
+  labels:
+    # Etiqueta principal del Service.
+    app: users-nodejs
+# Especificacion del Service.
+spec:
+  # Selector para enrutar al Pod correcto.
+  selector:
+    # Debe coincidir con label del Pod template.
+    app: users-nodejs
+  # Definicion de puertos del Service.
+  ports:
+    # Mapeo del puerto del Service al puerto del contenedor.
+    - protocol: TCP
+      # Puerto expuesto dentro del cluster.
+      port: 4021
+      # Puerto destino en el contenedor.
+      targetPort: 4021
+  # Tipo ClusterIP: solo accesible dentro del cluster.
+  type: ClusterIP

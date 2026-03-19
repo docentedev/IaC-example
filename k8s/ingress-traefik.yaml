@@ -1,0 +1,54 @@
+# API version para recursos de enrutamiento HTTP en Kubernetes.
+apiVersion: networking.k8s.io/v1
+# Tipo de recurso: Ingress.
+kind: Ingress
+# Metadatos del Ingress.
+metadata:
+  # Nombre del recurso.
+  name: microservicios-ingress
+  # Namespace donde existe el Ingress.
+  namespace: microservicios
+  annotations:
+    # EntryPoint HTTP de Traefik (puerto 80).
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+# Especificacion del Ingress.
+spec:
+  # Clase de Ingress Controller que procesara estas reglas.
+  ingressClassName: traefik
+  # Reglas de enrutamiento por host y path.
+  rules:
+    # Host que usaras para pruebas locales (se puede cambiar por dominio real).
+    - host: micro.local
+      http:
+        paths:
+          # Regla para API de products.
+          - path: /api/products
+            # Prefix significa que coincide /api/products y subrutas.
+            pathType: Prefix
+            backend:
+              service:
+                # Service destino para products.
+                name: products-java
+                port:
+                  # Puerto del Service de products.
+                  number: 4020
+          # Regla para API de users.
+          - path: /api/users
+            # Prefix significa que coincide /api/users y subrutas.
+            pathType: Prefix
+            backend:
+              service:
+                # Service destino para users.
+                name: users-nodejs
+                port:
+                  # Puerto del Service de users.
+                  number: 4021
+          # Ruta de health check de users. Sin esta entrada Traefik descarta /health
+          # porque el Ingress solo enruta los paths que estan explicitamente declarados.
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: users-nodejs
+                port:
+                  number: 4021
