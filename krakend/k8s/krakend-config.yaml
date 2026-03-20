@@ -1,0 +1,98 @@
+# ConfigMap con la configuracion completa de KrakenD.
+# Al modificar este archivo se debe hacer rollout restart del Deployment
+# para que el pod tome la nueva configuracion.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krakend-config
+  namespace: microservicios
+data:
+  krakend.json: |
+    {
+      "$schema": "https://www.krakend.io/schema/v3.json",
+      "version": 3,
+      "name": "API Gateway - Microservicios DuocUC",
+      "timeout": "3000ms",
+      "cache_ttl": "300s",
+      "output_encoding": "json",
+      "endpoints": [
+        {
+          "endpoint": "/api/products",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "backend": [
+            {
+              "url_pattern": "/api/products",
+              "encoding": "no-op",
+              "host": ["http://products-java:4020"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/products/{id}",
+          "method": "GET",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/api/products/{id}",
+              "encoding": "json",
+              "host": ["http://products-java:4020"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/users",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "backend": [
+            {
+              "url_pattern": "/api/users",
+              "encoding": "no-op",
+              "host": ["http://users-nodejs:4021"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/users/{id}",
+          "method": "GET",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/api/users/{id}",
+              "encoding": "json",
+              "host": ["http://users-nodejs:4021"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/users",
+          "method": "POST",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/api/users",
+              "encoding": "json",
+              "host": ["http://users-nodejs:4021"],
+              "method": "POST"
+            }
+          ]
+        },
+        {
+          "endpoint": "/health",
+          "method": "GET",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/health",
+              "encoding": "json",
+              "host": ["http://users-nodejs:4021"],
+              "method": "GET"
+            }
+          ]
+        }
+      ]
+    }

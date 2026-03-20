@@ -1,0 +1,61 @@
+# Deployment de KrakenD API Gateway.
+# KrakenD es stateless: toda la configuracion viene del ConfigMap
+# montado como archivo en /etc/krakend/krakend.json.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: krakend
+  namespace: microservicios
+  labels:
+    app: krakend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: krakend
+  template:
+    metadata:
+      labels:
+        app: krakend
+    spec:
+      containers:
+        - name: krakend
+          # Community Edition oficial de KrakenD.
+          image: devopsfaith/krakend:2.7
+          imagePullPolicy: IfNotPresent
+          # KrakenD espera el archivo de config en esta ruta por defecto.
+          args: ["run", "-c", "/etc/krakend/krakend.json"]
+          ports:
+            # Puerto por defecto de KrakenD.
+            - containerPort: 8080
+          # Montar el ConfigMap como archivo dentro del contenedor.
+          volumeMounts:
+            - name: krakend-config
+              mountPath: /etc/krakend/krakend.json
+              # subPath permite montar solo una clave del ConfigMap
+              # en lugar de todo el directorio.
+              subPath: krakend.json
+      volumes:
+        - name: krakend-config
+          configMap:
+            name: krakend-config
+---
+# Service para exponer KrakenD dentro del cluster.
+# Traefik enrutara el trafico /api hacia este Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: krakend
+  namespace: microservicios
+  labels:
+    app: krakend
+spec:
+  selector:
+    app: krakend
+  ports:
+    - protocol: TCP
+      # Puerto del Service dentro del cluster.
+      port: 8080
+      # Puerto del contenedor KrakenD.
+      targetPort: 8080
+  type: ClusterIP

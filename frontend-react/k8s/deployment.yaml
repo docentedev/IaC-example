@@ -1,0 +1,48 @@
+# Deployment del frontend React servido por nginx.
+# nginx solo sirve archivos estaticos generados por el build de Vite.
+# No hace proxy de /api: Traefik enruta /api directamente a KrakenD.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-react
+  namespace: microservicios
+  labels:
+    app: frontend-react
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-react
+  template:
+    metadata:
+      labels:
+        app: frontend-react
+    spec:
+      containers:
+        - name: frontend-react
+          # Imagen construida localmente con el Dockerfile multi-stage.
+          image: frontend-react:1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            # nginx escucha en el puerto 80 dentro del contenedor.
+            - containerPort: 80
+---
+# Service para exponer el pod de frontend-react dentro del cluster.
+# Traefik lo alcanzara a traves de este Service.
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-react
+  namespace: microservicios
+  labels:
+    app: frontend-react
+spec:
+  selector:
+    app: frontend-react
+  ports:
+    - protocol: TCP
+      # Puerto del Service dentro del cluster.
+      port: 80
+      # Puerto del contenedor (nginx).
+      targetPort: 80
+  type: ClusterIP

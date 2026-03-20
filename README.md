@@ -13,7 +13,7 @@ Ilustra cómo pasar de desarrollo local → containerización → orquestación 
 - Arquitectura diseñada para mostrar cómo dos microservicios independientes se comunican y se orquestan
 
 **Fases del laboratorio:**
-Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes
+Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes → 5️⃣ API Gateway + Frontend
 
 ## 📋 Indice de contenidos
 
@@ -21,7 +21,8 @@ Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker
 1. [Ejecución manual (local)](#1-ejecutar-de-forma-manual-sin-docker) ← **Comienza aquí si es tu primera vez**
 2. [Docker Dockerfiles](#2-ejecutar-usando-dockerfiles-sin-compose)
 3. [Docker Compose](#3-ejecutar-con-docker-compose)
-4. [Kubernetes](#4-base-para-kubernetes-siguiente-paso) ← **Objetivo final del laboratorio**
+4. [Kubernetes](#4-base-para-kubernetes-siguiente-paso)
+5. [API Gateway + Frontend React](#5-api-gateway--frontend-react-e2e-completo) ← **Fase final del laboratorio**
 
 ---
 
@@ -2021,6 +2022,324 @@ Regla práctica:
 
 ---
 
+## 5) API Gateway + Frontend React: e2e completo
+
+**Objetivo:** Agregar un API Gateway (KrakenD) entre Traefik y los microservicios, y un frontend React
+que consuma las APIs. Con esto el flujo end-to-end queda completo: navegador → Traefik → KrakenD
+→ microservicios.
+
+**Qué aprenderás:** Qué es un API Gateway y por qué existe, build multi-stage de Docker para
+frontend estático, ConfigMap como mecanismo de configuración de KrakenD.
+
+---
+
+### 5.1 🧠 Concepto: ¿Qué es un API Gateway y por qué no basta con Traefik?
+
+Traefik ya enruta tráfico — ¿entonces para qué agregar KrakenD?
+
+| Responsabilidad | Traefik (ya tenés) | KrakenD (nuevo) |
+|---|---|---|
+| Enrutamiento por host/path | ✅ | ✅ |
+| TLS termination (HTTPS) | ✅ | ❌ (no es su rol) |
+| Rate limiting por consumidor | Básico | ✅ por API key/JWT |
+| Transformación de requests | Limitado | ✅ |
+| Agregación de múltiples backends | ❌ | ✅ |
+| Validación JWT / API Keys | ❌ | ✅ |
+| Analytics por endpoint/consumidor | ❌ | ✅ |
+
+**Regla simple:** Traefik es la puerta del edificio (quién entra al cluster). KrakenD es la
+recepcionista (a qué piso y con qué permisos).
+
+Ambos coexisten sin solaparse:
+
+```
+Browser
+  └─► Traefik (edge del cluster, TLS, entrada)
+        └─► KrakenD (API Gateway: auth, rate limit, agregación)
+              ├─► products-java:4020
+              └─► users-nodejs:4021
+```
+
+KrakenD es **stateless**: no tiene base de datos. Toda su configuración vive en un archivo
+`krakend.json` que se monta en el pod como un **ConfigMap** de Kubernetes. Esto lo hace
+ideal para IaC: la configuración es código, versionada en git.
+
+---
+
+### 5.2 🌐 Concepto: ¿Por qué nginx para el frontend y no Node.js?
+
+El build de Vite (React) produce HTML + JS + CSS puros — no hay lógica de servidor.
+nginx sirve esos archivos estáticos de forma mucho más eficiente que Node.js:
+
+- Sin runtime de JavaScript en producción
+- Sin Garbage Collector
+- Cache HTTP nativo (`Cache-Control`, `ETag`)
+- Imagen Docker final: **~25MB** (vs ~400MB con node_modules)
+
+El truco está en el **Dockerfile multi-stage**:
+
+```
+Stage 1: node:20-alpine          Stage 2: nginx:alpine
+├── npm ci                       ├── COPY --from=builder /app/dist
+├── npm run build                │     /usr/share/nginx/html
+└── genera /app/dist/            └── imagen final sin node_modules
+     (HTML/JS/CSS puro)
+```
+
+El stage 2 solo copia el resultado compilado del stage 1. `node_modules` nunca entra
+a la imagen final.
+
+---
+
+### 5.3 🏗️ Archivos nuevos en el proyecto
+
+```
+microservicios/
+├── frontend-react/
+│   ├── Dockerfile              ← multi-stage: node build → nginx serve
+│   ├── nginx.conf              ← fallback a index.html para React Router
+│   ├── package.json
+│   ├── vite.config.js          ← proxy /api en desarrollo local
+│   ├── index.html
+│   ├── src/
+│   │   ├── main.jsx
+│   │   └── App.jsx             ← consume /api/products y /api/users
+│   └── k8s/
+│       └── deployment.yaml     ← Deployment nginx + Service ClusterIP
+├── krakend/
+│   └── k8s/
+│       ├── krakend-config.yaml ← ConfigMap con krakend.json
+│       └── deployment.yaml     ← Deployment KrakenD + Service ClusterIP
+└── k8s/
+    ├── ingress-traefik.yaml           ← Fase 4 (sin cambios)
+    └── ingress-traefik-v2-gateway.yaml ← Fase 5 (reemplaza al anterior)
+```
+
+---
+
+### 5.4 🔧 Arquitectura: diagrama e2e completo
+
+```mermaid
+flowchart TB
+  subgraph Client[Cliente]
+    U[Browser / Postman / curl]
+  end
+
+  subgraph Entry[Entrada al cluster]
+    T[Traefik Ingress Controller]
+    I[Ingress v2
+    host: micro.local
+    /api → krakend
+    / → frontend-react]
+  end
+
+  subgraph K8s[Namespace: microservicios]
+    FE[Service frontend-react ClusterIP:80]
+    DFE[Deployment frontend-react]
+    PFE[Pod nginx sirviendo dist/]
+
+    GW[Service krakend ClusterIP:8080]
+    DGW[Deployment KrakenD]
+    PGW[Pod KrakenD]
+    CM[ConfigMap krakend-config]
+
+    SP[Service products-java ClusterIP:4020]
+    DP[Deployment products-java]
+    PP[Pod products-java]
+
+    SU[Service users-nodejs ClusterIP:4021]
+    DU[Deployment users-nodejs]
+    PU[Pod users-nodejs]
+    PVC[PVC users-data-pvc]
+  end
+
+  U --> T
+  T --> I
+  I -->|/| FE
+  I -->|/api| GW
+
+  FE --> DFE --> PFE
+  GW --> DGW --> PGW
+  CM -.->|montado como volumen| PGW
+
+  PGW -->|/api/products| SP --> DP --> PP
+  PGW -->|/api/users| SU --> DU --> PU
+  PU --> PVC
+```
+
+---
+
+### 5.5 🚀 Despliegue: pasos para levantar la fase 5
+
+#### Paso 1: Construir las imágenes
+
+```bash
+docker build -t frontend-react:1.0 ./frontend-react
+```
+
+KrakenD usa la imagen oficial `devopsfaith/krakend:2.7` — no necesita build local.
+
+#### Paso 2: Aplicar los manifests de KrakenD
+
+```bash
+kubectl apply -f krakend/k8s/krakend-config.yaml
+kubectl apply -f krakend/k8s/deployment.yaml
+```
+
+Explicacion:
+- `krakend-config.yaml`: crea el ConfigMap con `krakend.json` (rutas, backends, timeouts).
+- `deployment.yaml`: crea el Deployment que usa la imagen oficial y monta el ConfigMap,
+  más el Service ClusterIP que Traefik usará para enrutar `/api`.
+
+#### Paso 3: Aplicar el manifest del frontend
+
+```bash
+kubectl apply -f frontend-react/k8s/deployment.yaml
+```
+
+Explicacion:
+- Crea el Deployment de nginx con la imagen `frontend-react:1.0`.
+- Crea el Service ClusterIP que Traefik usará para enrutar `/`.
+
+#### Paso 4: Reemplazar el Ingress (el único cambio visible para el cluster)
+
+```bash
+kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
+```
+
+Como el nuevo Ingress tiene el mismo `name: microservicios-ingress`, el `apply` lo
+sobreescribe en el cluster sin necesidad de borrar nada manual. Traefik detecta el cambio
+y actualiza sus rutas automáticamente.
+
+**Diferencia entre v1 y v2:**
+
+| Path | Ingress v1 (Fase 4) | Ingress v2 (Fase 5) |
+|---|---|---|
+| `/api/products` | → products-java:4020 | — |
+| `/api/users` | → users-nodejs:4021 | — |
+| `/api` (todo) | — | → krakend:8080 |
+| `/health` | → users-nodejs:4021 | → krakend:8080 |
+| `/` | — | → frontend-react:80 |
+
+#### Paso 5: Verificar que todos los pods están Running
+
+```bash
+kubectl get pods -n microservicios
+```
+
+Deberías ver estos 4 pods:
+
+```
+NAME                              READY   STATUS    RESTARTS
+frontend-react-xxxxx              1/1     Running   0
+krakend-xxxxx                     1/1     Running   0
+products-java-xxxxx               1/1     Running   0
+users-nodejs-xxxxx                1/1     Running   0
+```
+
+#### Paso 6: Probar el sistema completo
+
+```bash
+# Frontend React (navegador o curl)
+curl http://micro.local
+
+# API a través de KrakenD
+curl http://micro.local/api/products
+curl http://micro.local/api/users
+
+# Health check
+curl http://micro.local/health
+```
+
+Oo abrir directamente `http://micro.local` en el navegador — verás el frontend React
+cargando los datos de los dos microservicios.
+
+---
+
+### 5.6 💻 Desarrollo local del frontend (sin cluster)
+
+Para iterar en el frontend sin necesitar Kubernetes:
+
+```bash
+# Terminal 1: levantar los microservicios
+docker compose up -d
+
+# Terminal 2: frontend en modo dev
+cd frontend-react
+npm install
+npm run dev
+# → http://localhost:3000
+```
+
+El `vite.config.js` ya tiene configurado el proxy para que `/api` en local apunte
+a `http://localhost:8080`. Si no tenés KrakenD local corriendo, podés ajustarlo
+tranquilamente para que apunte directo a `http://localhost:4020` y `http://localhost:4021`
+durante el desarrollo.
+
+---
+
+### 5.7 🔄 Actualizar la configuración de KrakenD
+
+Si necesitás agregar o modificar endpoints en KrakenD:
+
+1. Editar `krakend/k8s/krakend-config.yaml` (la sección `krakend.json` del ConfigMap).
+2. Aplicar el cambio:
+
+```bash
+kubectl apply -f krakend/k8s/krakend-config.yaml
+```
+
+3. Reiniciar el pod para que tome la nueva configuración:
+
+```bash
+kubectl rollout restart deployment/krakend -n microservicios
+```
+
+4. Verificar que el rollout terminó:
+
+```bash
+kubectl rollout status deployment/krakend -n microservicios
+```
+
+---
+
+### 5.8 🧹 Limpieza: desmantelar la fase 5
+
+Para volver al estado de la Fase 4 (solo los dos microservicios):
+
+```bash
+# Revertir el Ingress a la version original
+kubectl apply -f k8s/ingress-traefik.yaml
+
+# Eliminar KrakenD
+kubectl delete -f krakend/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f krakend/k8s/krakend-config.yaml --ignore-not-found
+
+# Eliminar frontend
+kubectl delete -f frontend-react/k8s/deployment.yaml --ignore-not-found
+```
+
+Para desmantelar todo (Fases 4 y 5 juntas):
+
+```bash
+kubectl delete -f k8s/ingress-traefik-v2-gateway.yaml --ignore-not-found
+kubectl delete -f krakend/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f krakend/k8s/krakend-config.yaml --ignore-not-found
+kubectl delete -f frontend-react/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f users-nodejs/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f products-java/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f users-nodejs/k8s/pvc.yaml --ignore-not-found
+kubectl delete -f k8s/namespace.yaml --ignore-not-found
+```
+
+Limpiar imágenes locales:
+
+```bash
+docker rmi -f frontend-react:1.0 products-java:1.0 users-nodejs:1.0 2>/dev/null || true
+```
+
+---
+
 ## 📚 Aprendizajes clave esperados (Fullstack 3 - Ingeniería de Software)
 
 Después de completar este laboratorio, deberías entender:
@@ -2045,10 +2364,11 @@ Después de completar este laboratorio, deberías entender:
 - En Kubernetes: **PVC** = solicita almacenamiento persistente (agnóstico del nodo, portable).
 - Aprendiste que los datos en memoria de un contenedor se pierden si reinicia → necesitas persistencia.
 
-### 5️⃣ Networking: Localhost → Ingress
+### 5️⃣ Networking: Localhost → Ingress → API Gateway
 - Fase 1-2: Accedías servicios en `localhost:4020` (desarrollo local).
 - Fase 3: Docker Compose las exponía automáticamente.
-- Fase 4: **Kubernetes + Ingress + Traefik** = punto único de entrada + routing inteligente (lo que usa AWS, GCP, Azure en producción).
+- Fase 4: **Kubernetes + Ingress + Traefik** = punto único de entrada + routing inteligente.
+- Fase 5: **KrakenD** como API Gateway centraliza auth, rate limiting y transformacion. **nginx** sirve el frontend React estático. El e2e queda completo: browser → Traefik → KrakenD → microservicios.
 
 ### 6️⃣ Infrastructure as Code (IaC): YAML manifests
 - Los archivos `deployment.yaml`, `service.yaml`, `ingress.yaml` **declaran el estado deseado**.
@@ -2075,8 +2395,9 @@ Después de completar este laboratorio, deberías entender:
 1. **Agregar base de datos:** Modifica los servicios para usar PostgreSQL o MongoDB en lugar de mock data.
 2. **CI/CD pipeline:** Usa GitHub Actions para auto-build y auto-deploy a Kubernetes.
 3. **Monitoreo:** Agrega Prometheus + Grafana para métricas, o ELK para logs centralizados.
-4. **Autenticación:** Implementa JWT en los servicios y valida en Traefik con middlewares.
-5. **Stress testing:** Usa herramientas como `k6` o `Apache JMeter` para probar bajo carga.
+4. **Autenticación con KrakenD:** Configura validación JWT en KrakenD — los microservicios dejan de preocuparse por auth.
+5. **Rate limiting en KrakenD:** Agrega límites por IP o por API key en `krakend.json`.
+6. **Stress testing:** Usa herramientas como `k6` o `Apache JMeter` para probar bajo carga.
 
 ---
 

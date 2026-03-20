@@ -1,0 +1,58 @@
+# Ingress actualizado para la Fase 5 del laboratorio.
+# Diferencias respecto a ingress-traefik.yaml (version original):
+#
+#   ANTES (v1):  Traefik enruta /api/products y /api/users directamente
+#                a cada microservicio.
+#
+#   AHORA (v2):  Traefik enruta /api a KrakenD (API Gateway), que centraliza
+#                el acceso a todos los microservicios.
+#                Se agrega el frontend React en la ruta raiz /.
+#
+# Para aplicar este ingress (reemplaza al anterior):
+#   kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
+#
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: microservicios-ingress
+  namespace: microservicios
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: micro.local
+      http:
+        paths:
+          # Todo el trafico de API pasa por KrakenD (API Gateway).
+          # KrakenD internamente enruta a products-java y users-nodejs.
+          # Orden importa: rutas mas especificas antes de la raiz.
+          - path: /api
+            # Prefix coincide con /api, /api/products, /api/users, etc.
+            pathType: Prefix
+            backend:
+              service:
+                # KrakenD centraliza todo el trafico de API.
+                name: krakend
+                port:
+                  # Puerto por defecto de KrakenD.
+                  number: 8080
+          # Health check tambien pasa por KrakenD, que lo proxea a users-nodejs.
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: krakend
+                port:
+                  number: 8080
+          # El frontend React (archivos estaticos servidos por nginx) captura
+          # todo lo que no sea /api ni /health. Debe ir al final.
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                # nginx sirviendo el build estatico de Vite.
+                name: frontend-react
+                port:
+                  # Puerto de nginx dentro del contenedor.
+                  number: 80
