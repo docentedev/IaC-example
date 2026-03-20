@@ -2854,29 +2854,66 @@ graph TD
 
 ---
 
-## �📚 Aprendizajes clave esperados (Fullstack 3 - Ingeniería de Software)
+## 🚀 Qué faltaría para sea productivo en entorno real
+
+Este laboratorio entrega una base muy sólida, pero en industria todavía faltan competencias clave para pasar de "funciona" a "operable y seguro en producción".
+
+### 1) Seguridad aplicada (más allá del JWT básico)
+- Gestión de sesión robusta: refresh tokens, revocación y rotación de secretos.
+- Protección de login: rate limiting, lockout progresivo y auditoría de intentos.
+- Hardening del frontend: reducir riesgo de XSS y manejo seguro de credenciales.
+- Políticas de seguridad en Kubernetes: RBAC real, NetworkPolicies y principio de mínimo privilegio.
+
+### 2) Calidad de software y pruebas
+- Pruebas unitarias y de integración automatizadas por servicio.
+- Pruebas end-to-end del flujo completo (auth + cart + products).
+- Criterios de calidad en CI (fallar pipeline si hay tests o linting en rojo).
+
+### 3) Observabilidad y operación
+- Logging estructurado y correlación por request-id.
+- Métricas y alertas (latencia, errores 5xx, tasa de login fallido).
+- Dashboards operativos para detectar degradación antes de caída.
+
+### 4) Ingeniería de plataforma (DevOps real)
+- Pipeline CI/CD con build, test, escaneo de vulnerabilidades y despliegue controlado.
+- Estrategias de despliegue (rolling, blue/green o canary) con rollback automático.
+- Gestión de configuración por ambiente (dev/stage/prod) sin duplicar manifiestos.
+
+### 5) Diseño de datos y contratos
+- Versionado de APIs y compatibilidad hacia atrás.
+- Migraciones de base de datos (schema evolution) con trazabilidad.
+- Manejo de errores estandarizado (códigos, mensajes y contratos de respuesta).
+
+### 6) Resiliencia entre microservicios
+- Timeouts, reintentos y circuit breaker en llamadas internas.
+- Patrones de tolerancia a fallos para que una caída parcial no derribe todo el sistema.
+- Pruebas de carga y de caos para validar comportamiento bajo estrés.
+
+---
+
+## 📚 Aprendizajes clave esperados (Fullstack 3 - Ingeniería de Software)
 
 Después de completar este laboratorio, deberías entender:
 
 ### 1️⃣ Concepto: Microservicios vs monolito
-- Este proyecto muestra **dos servicios independientes** (`products-java` + `users-nodejs`) que podrían ser **un solo monolito**.
+- Este proyecto muestra **cuatro servicios principales** (`products-java`, `users-nodejs`, `auth-service`, `cart-service`) que podrían ser un solo monolito.
 - **Ventaja:** Equipos separados pueden trabajar en paralelo, escalar servicios individuales, usar diferentes lenguajes.
 - **Desventaja:** Más complejidad operacional, necesitas orquestar la comunicación entre servicios.
 
 ### 2️⃣ Containerización: De local → Docker
-- Aprendiste a empaquetar aplicaciones en **imágenes Docker reutilizables**.
+- Aprendiste a empaquetar aplicaciones en **imágenes Docker reutilizables** para Java, Node.js y Python.
 - Las imágenes garantizan: "funciona en mi computador" = "funciona en producción" (reproducibilidad).
 - Concepto clave: **capas de imagen** (cada `RUN`, `COPY` crea una capa; se cachean para build rápido).
 
 ### 3️⃣ Orquestación: Compose vs Kubernetes
 - **Docker Compose:** Orquestador local para desarrollo. Define servicios + redes en `docker-compose.yml`.
 - **Kubernetes:** Orquestador de producción. Maneja auto-escalado, auto-recuperación, actualización sin downtime.
-- En este lab, Compose es el "trampolín" a Kubernetes.
+- En este lab, Compose fue el "trampolín" a Kubernetes y luego se extendió con API Gateway, auth y carrito.
 
 ### 4️⃣ Persistencia: Bind mounts → PVC
 - En Docker: **bind mount** = vincula archivo host ↔ contenedor (temporal, no es portátil).
 - En Kubernetes: **PVC** = solicita almacenamiento persistente (agnóstico del nodo, portable).
-- Aprendiste que los datos en memoria de un contenedor se pierden si reinicia → necesitas persistencia.
+- Aprendiste que los datos en memoria de un contenedor se pierden si reinicia → necesitas persistencia; en este laboratorio se aplicó en `users-nodejs`, `auth-service` y `cart-service`.
 
 ### 5️⃣ Networking: Localhost → Ingress → API Gateway
 - Fase 1-2: Accedías servicios en `localhost:4020` (desarrollo local).
@@ -2885,15 +2922,21 @@ Después de completar este laboratorio, deberías entender:
 - Fase 5: **KrakenD** como API Gateway centraliza auth, rate limiting y transformacion. **nginx** sirve el frontend React estático. El e2e queda completo: browser → Traefik → KrakenD → microservicios.
 - Fase 7: **cart-service** llama a **products-java** internamente (DNS de cluster). Esta es la comunicación inter-microservicio real, directa, sin pasar por el API Gateway.
 
+### 5.1️⃣ Autenticación y autorización básica con JWT
+- Implementaste `auth-service` con `register`, `login` y `me`, usando bcrypt + JWT.
+- Integraste el frontend para iniciar/cerrar sesión y consumir rutas protegidas.
+- Aplicaste propagación de `Authorization` a través de KrakenD hacia `cart-service`.
+
 ### 6️⃣ Infrastructure as Code (IaC): YAML manifests
 - Los archivos `deployment.yaml`, `service.yaml`, `ingress.yaml` **declaran el estado deseado**.
 - Kubernetes mantiene ese estado: si un Pod muere, Kubernetes lo crea de nuevo automáticamente.
 - Concepto: **Declarativo** (decimos qué queremos) vs **Imperativo** (decimos cómo hacerlo).
+- También aplicaste gestión por fases (`ingress`/`krakend-config` v1→v2) y rollback por manifiestos.
 
 ### 7️⃣ Conceptos de DevOps que tocaste
-- **CI/CD:** No lo hicimos aquí, pero: los Dockerfiles y manifests se versionarían en Git, con pipelines que hacen build → test → deploy automático.
-- **Monitoreo:** En producción querrías logs centralizados y métricas (usarías ELK, Prometheus, Datadog, etc.).
-- **Seguridad:** En este lab viste un ejemplo basico de `Secret`; en un siguiente nivel se profundiza con TLS, RBAC, network policies y gestores externos de secretos.
+- **Automatización de despliegue (base CI/CD):** Se implementaron scripts reproducibles de ciclo completo (`deploy-all.sh` y `teardown.sh`), versionado en Git y release por tags. Lo que falta para CI/CD completo es pipeline automático (GitHub Actions u otro) con build+test+deploy.
+- **Operación y troubleshooting:** Se trabajó con diagnósticos reales de pods, logs, rollouts y rollback por fases. Lo que falta para observabilidad completa es métricas, alertas y dashboards centralizados.
+- **Seguridad aplicada (nivel laboratorio):** Se implementó JWT, bcrypt, Secrets en Kubernetes y endpoints protegidos en auth/cart. Lo que falta para nivel productivo es TLS, RBAC estricto, NetworkPolicies, rotación de secretos y hardening adicional.
 
 ---
 
@@ -2907,12 +2950,12 @@ Después de completar este laboratorio, deberías entender:
 
 ## 💡 Próximos pasos sugeridos
 
-1. **Agregar base de datos:** Modifica los servicios para usar PostgreSQL o MongoDB en lugar de mock data.
-2. **CI/CD pipeline:** Usa GitHub Actions para auto-build y auto-deploy a Kubernetes.
-3. **Monitoreo:** Agrega Prometheus + Grafana para métricas, o ELK para logs centralizados.
-4. **Autenticación con KrakenD:** Configura validación JWT en KrakenD — los microservicios dejan de preocuparse por auth.
-5. **Rate limiting en KrakenD:** Agrega límites por IP o por API key en `krakend.json`.
-6. **Stress testing:** Usa herramientas como `k6` o `Apache JMeter` para probar bajo carga.
+1. **Completar persistencia en todos los dominios:** `auth-service` y `cart-service` ya usan PostgreSQL; como siguiente paso, migrar también `products-java` y/o `users-nodejs` a base de datos real.
+2. **CI/CD real:** Agregar GitHub Actions para build, test, escaneo y deploy automático por rama/tag.
+3. **Observabilidad completa:** Integrar métricas y logs centralizados (Prometheus/Grafana + stack de logs).
+4. **Validación JWT en KrakenD:** Mover parte de la validación al gateway para simplificar microservicios.
+5. **Rate limiting en KrakenD:** Definir límites por IP/API key y políticas de protección en login.
+6. **Pruebas de carga y resiliencia:** Incorporar `k6` o `Apache JMeter` para validar rendimiento y estabilidad.
 
 ---
 
