@@ -1,3 +1,12 @@
+# ------------------------------------------------------------
+# Dockerfile estandar
+# Patron: multi-stage build (builder -> runner)
+# Objetivo:
+# - builder: instalar dependencias y generar artefactos
+# - runner: ejecutar con la imagen mas liviana posible
+# ------------------------------------------------------------
+
+# Stage builder: instala dependencias y artefactos de build.
 FROM eclipse-temurin:25-jdk-alpine AS builder
 WORKDIR /workspace
 
@@ -7,6 +16,7 @@ COPY src ./src
 RUN chmod +x gradlew
 RUN ./gradlew clean bootJar --no-daemon
 
+# Stage runner: contiene solo lo necesario para ejecutar el servicio.
 FROM eclipse-temurin:25-jre-alpine AS runner
 WORKDIR /app
 

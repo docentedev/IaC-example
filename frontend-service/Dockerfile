@@ -1,33 +1,30 @@
-# ─────────────────────────────────────────────
-# Stage 1: Build del proyecto React con Vite
-# ─────────────────────────────────────────────
+# ------------------------------------------------------------
+# Dockerfile estandar
+# Patron: multi-stage build (builder -> runner)
+# Objetivo:
+# - builder: instalar dependencias y generar artefactos
+# - runner: ejecutar con la imagen mas liviana posible
+# ------------------------------------------------------------
+
+# Stage builder: instala dependencias y artefactos de build.
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copiar solo los archivos de dependencias primero para aprovechar
-# la cache de Docker. Las dependencias solo se reinstalan si
-# package.json o package-lock.json cambian.
+# Copia primero manifiestos para aprovechar cache de capas.
 COPY package*.json ./
 RUN npm install
 
-# Copiar el resto del codigo fuente y ejecutar el build.
-# Vite genera los archivos estaticos en /app/dist
+# Copia el codigo fuente y genera los estaticos en /app/dist.
 COPY . .
 RUN npm run build
 
-# ─────────────────────────────────────────────
-# Stage 2: Servir los archivos estaticos con nginx
-# ─────────────────────────────────────────────
-FROM nginx:alpine
+# Stage runner: contiene solo lo necesario para ejecutar el servicio.
+FROM nginx:alpine AS runner
 
-# Copiar el resultado del build desde el stage anterior.
-# Solo se copia el directorio dist, el resto (node_modules, src, etc.)
-# queda fuera de la imagen final.
+# Copia solo los estaticos construidos y configuracion de nginx.
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Reemplazar la configuracion por defecto de nginx con la custom
-# que soporta React Router (fallback a index.html).
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
