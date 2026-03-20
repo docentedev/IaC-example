@@ -1,24 +1,154 @@
-version: "3.9"
-
 services:
-  products-java:
+  # Servicios de aplicacion (product/user/auth/cart/frontend):
+  # se construyen desde su propio Dockerfile porque contienen codigo propio.
+  product-service:
     build:
-      context: ./products-java
+      context: ./product-service
       dockerfile: Dockerfile
-    container_name: products-java
+    container_name: product-service
     ports:
       - "4020:4020"
     environment:
       - SERVER_PORT=4020
 
-  users-nodejs:
+  user-service:
     build:
-      context: ./users-nodejs
+      context: ./user-service
       dockerfile: Dockerfile
-    container_name: users-nodejs
+    container_name: user-service
     ports:
       - "4021:4021"
     environment:
       - PORT=4021
     volumes:
-      - ./users-nodejs/data/data.json:/app/data/data.json
+      # Persistencia de usuarios en archivo local del host (bind mount),
+      # util para desarrollo y para ver cambios de inmediato.
+      - ./user-service/data/data.json:/app/data/data.json
+
+  # PostgreSQL NO se construye desde Dockerfile del proyecto.
+  # Aqui usamos una imagen oficial ya lista para usar (postgres:16-alpine).
+  # La configuracion se hace con variables POSTGRES_* en runtime.
+  auth-postgres:
+    image: postgres:16-alpine
+    container_name: auth-postgres
+    environment:
+      - POSTGRES_USER=auth
+      - POSTGRES_PASSWORD=auth123
+      - POSTGRES_DB=authdb
+    ports:
+      # Puerto host 5433 para no chocar con un postgres local en 5432.
+      - "5433:5432"
+    volumes:
+      # Volumen nombrado: mantiene data aunque borres/recrees contenedores.
+      - auth-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # Healthcheck real de base de datos para arrancar auth-service
+      # solo cuando PostgreSQL este listo.
+      test: ["CMD-SHELL", "pg_isready -U auth -d authdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # auth-service SI se construye desde Dockerfile porque es codigo propio.
+  # Ojo: este servicio usa DB_HOST=auth-postgres (nombre del servicio en la red compose).
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    environment:
+      - PORT=3002
+      - DB_HOST=auth-postgres
+      - DB_PORT=5432
+      - DB_NAME=authdb
+      - DB_USER=auth
+      - DB_PASSWORD=auth123
+      - JWT_SECRET=supersecretjwt
+      - JWT_EXPIRES=24h
+    ports:
+      - "3002:3002"
+    depends_on:
+      # A diferencia de service_started, service_healthy espera healthcheck OK.
+      auth-postgres:
+        condition: service_healthy
+
+  # Segundo PostgreSQL dedicado al cart-service (aislamiento por dominio).
+  cart-postgres:
+    image: postgres:16-alpine
+    container_name: cart-postgres
+    environment:
+      - POSTGRES_USER=cart
+      - POSTGRES_PASSWORD=cart123
+      - POSTGRES_DB=cartdb
+    ports:
+      # Puerto host 5434 por la misma razon de colisiones.
+      - "5434:5432"
+    volumes:
+      - cart-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cart -d cartdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # cart-service tambien se construye desde Dockerfile.
+  # Consume product-service por red interna de compose.
+  cart-service:
+    build:
+      context: ./cart-service
+      dockerfile: Dockerfile
+    container_name: cart-service
+    environment:
+      - DB_HOST=cart-postgres
+      - DB_PORT=5432
+      - DB_NAME=cartdb
+      - DB_USER=cart
+      - DB_PASSWORD=cart123
+      - JWT_SECRET=supersecretjwt
+      - PRODUCTS_SERVICE_URL=http://product-service:4020
+    ports:
+      - "4022:4022"
+    depends_on:
+      cart-postgres:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+
+  # KrakenD usa imagen oficial + archivo de configuracion montado.
+  # No requiere build del repo, solo el bind mount del json.
+  krakend:
+    image: devopsfaith/krakend:2.7
+    container_name: krakend
+    command: ["run", "-c", "/etc/krakend/krakend.json"]
+    volumes:
+      # Config en modo solo lectura para evitar cambios accidentales desde el contenedor.
+      - ./krakend/compose/krakend.json:/etc/krakend/krakend.json:ro
+    ports:
+      - "8080:8080"
+    depends_on:
+      product-service:
+        condition: service_started
+      user-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      cart-service:
+        condition: service_started
+
+  # Frontend se construye con su Dockerfile (build de Vite + nginx runtime).
+  frontend-service:
+    build:
+      context: ./frontend-service
+      dockerfile: Dockerfile
+    container_name: frontend-service
+    ports:
+      - "8081:80"
+    depends_on:
+      krakend:
+        condition: service_started
+
+volumes:
+  # Volumenes nombrados administrados por Docker.
+  # Persisten los datos de Postgres entre reinicios y recreaciones.
+  auth-postgres-data:
+  cart-postgres-data:

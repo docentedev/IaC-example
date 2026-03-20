@@ -1,6 +1,6 @@
 # TESTING.md
 
-Guía de pruebas para el microservicio Java `products-java`, incluyendo reporte de cobertura.
+Guía de pruebas para el microservicio Java `product-service`, incluyendo reporte de cobertura.
 
 ## Objetivo
 
@@ -10,17 +10,17 @@ Guía de pruebas para el microservicio Java `products-java`, incluyendo reporte 
 
 ## Qué se agregó
 
-- **Tests unitarios de servicio**: `products-java/src/test/java/com/duoc/products/service/ProductServiceTest.java`
+- **Tests unitarios de servicio**: `product-service/src/test/java/com/duoc/products/service/ProductServiceTest.java`
   - Caso con datos en repositorio.
   - Caso fallback a mock cuando repositorio está vacío.
   - Búsqueda por ID existente/no existente.
 
-- **Tests web del controlador**: `products-java/src/test/java/com/duoc/products/controller/ProductControllerTest.java`
+- **Tests web del controlador**: `product-service/src/test/java/com/duoc/products/controller/ProductControllerTest.java`
   - `GET /api/products` retorna 200 y listado.
   - `GET /api/products/{id}` retorna 200 cuando existe.
   - `GET /api/products/{id}` retorna 404 cuando no existe.
 
-- **Cobertura JaCoCo en Gradle**: configurada en `products-java/build.gradle`.
+- **Cobertura JaCoCo en Gradle**: configurada en `product-service/build.gradle`.
 
 Nota técnica (Java 25):
 - Se mantiene Java 25.
@@ -147,14 +147,14 @@ Si además quieres cobertura, agrega JaCoCo como en la sección 5.
 Desde la raíz del repo:
 
 ```bash
-cd products-java
+cd product-service
 ./gradlew clean test jacocoTestReport
 ```
 
 En Windows (PowerShell/CMD):
 
 ```powershell
-cd products-java
+cd product-service
 .\\gradlew.bat clean test jacocoTestReport
 ```
 
@@ -163,13 +163,13 @@ cd products-java
 Reporte HTML (abrir en navegador):
 
 ```text
-products-java/build/reports/jacoco/test/html/index.html
+product-service/build/reports/jacoco/test/html/index.html
 ```
 
 Reporte XML (útil para CI o integración con herramientas):
 
 ```text
-products-java/build/reports/jacoco/test/jacocoTestReport.xml
+product-service/build/reports/jacoco/test/jacocoTestReport.xml
 ```
 
 ## Ver coverage directamente en terminal
@@ -177,7 +177,7 @@ products-java/build/reports/jacoco/test/jacocoTestReport.xml
 Después de ejecutar:
 
 ```bash
-cd products-java
+cd product-service
 ./gradlew clean test jacocoTestReport
 ```
 
@@ -201,13 +201,13 @@ PY
 ```
 
 Importante:
-- Ese comando asume que estás posicionado en `products-java`.
+- Ese comando asume que estás posicionado en `product-service`.
 - Si estás en la raíz del repo (`microservicios`), usa esta ruta:
 
 ```bash
 python3 - <<'PY'
 import xml.etree.ElementTree as ET
-root = ET.parse('products-java/build/reports/jacoco/test/jacocoTestReport.xml').getroot()
+root = ET.parse('product-service/build/reports/jacoco/test/jacocoTestReport.xml').getroot()
 counters = {c.attrib['type']: c for c in root.findall('counter')}
 for t in ('LINE','BRANCH','METHOD','CLASS'):
   c = counters.get(t)

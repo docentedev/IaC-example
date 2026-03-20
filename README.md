@@ -4,19 +4,22 @@
 Ilustra cómo pasar de desarrollo local → containerización → orquestación de microservicios en Kubernetes.
 
 **Contenido:**
-- `products-java`: Spring Boot + Gradle, puerto `4020` (backend Java)
-- `users-nodejs`: Express.js, puerto `4021` (backend Node.js)
+- `product-service`: Spring Boot + Gradle, puerto `4020` (backend Java)
+- `user-service`: Express.js, puerto `4021` (backend Node.js)
 - `auth-service`: Express.js + JWT + PostgreSQL, puerto `3002` (autenticación)
 - `cart-service`: FastAPI + PostgreSQL, puerto `4022` (carrito)
 
 **Características:**
-- `products-java` y `users-nodejs` responden con datos mock para base del laboratorio
-- `users-nodejs` persiste usuarios en archivo JSON (`data/data.json`) — ejemplo de persistencia local
-- `auth-service` emite JWT y `cart-service` valida JWT y consume `products-java` por red interna del cluster
+- `product-service` y `user-service` responden con datos mock para base del laboratorio
+- `user-service` persiste usuarios en archivo JSON (`data/data.json`) — ejemplo de persistencia local
+- `auth-service` emite JWT y `cart-service` valida JWT y consume `product-service` por red interna del cluster
 - Arquitectura diseñada para mostrar cómo múltiples microservicios independientes se comunican y se orquestan
 
 **Fases del laboratorio:**
-Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes → 5️⃣ API Gateway + Frontend → 6️⃣ Auth Service (JWT) → 7️⃣ Cart Service (FastAPI)
+Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes → 5️⃣ API Gateway + Frontend → 6️⃣ Auth Service (JWT) → 7️⃣ Cart Service (FastAPI) → 8️⃣ resiliencia opcional con Circuit Breaker en KrakenD.
+
+**Material adicional:**
+- Ver `CIRCUIT_BREAKER_KRAKEND.md` para la guia incremental de Circuit Breaker (v3 opcional).
 
 ## 📋 Indice de contenidos
 
@@ -25,7 +28,7 @@ Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker
 2. [Docker Dockerfiles](#2-ejecutar-usando-dockerfiles-sin-compose)
 3. [Docker Compose](#3-ejecutar-con-docker-compose)
 4. [Kubernetes](#4-base-para-kubernetes-siguiente-paso)
-5. [API Gateway + Frontend React](#5-api-gateway--frontend-react-e2e-completo)
+5. [API Gateway + Frontend React](#5-api-gateway--frontend-service-e2e-completo)
 6. [Auth Service (JWT + PostgreSQL)](#6-auth-service-jwt--postgresql)
 7. [Cart Service (FastAPI + inter-microservicio)](#7-cart-service-fastapipython--comunicación-inter-microservicio) ← **Fase final del laboratorio**
 
@@ -77,16 +80,16 @@ comando docker run que usa `-v`:
 
 macOS/Linux:
 ```bash
-docker run -d --name users-nodejs -p 4021:4021 \
-  -v $(pwd)/users-nodejs/data/data.json:/app/data/data.json \
-  users-nodejs:1.0
+docker run -d --name user-service -p 4021:4021 \
+  -v $(pwd)/user-service/data/data.json:/app/data/data.json \
+  user-service:1.0
 ```
 
 Windows (Git Bash):
 ```bash
-MSYS_NO_PATHCONV=1 docker run -d --name users-nodejs -p 4021:4021 \
-  -v $(pwd)/users-nodejs/data/data.json:/app/data/data.json \
-  users-nodejs:1.0
+MSYS_NO_PATHCONV=1 docker run -d --name user-service -p 4021:4021 \
+  -v $(pwd)/user-service/data/data.json:/app/data/data.json \
+  user-service:1.0
 ```
 
 - `MSYS_NO_PATHCONV=1`: desactiva la conversion automatica de rutas de Git Bash para ese comando.
@@ -155,14 +158,14 @@ funcionan igual en Git Bash sin ninguna modificacion.
 - Node.js 20+ con npm (instalado y en PATH)
 - Python 3.12+ (instalado y en PATH)
 
-**Nota técnica:** En `products-java` se usa **Gradle Wrapper** (`./gradlew`), una herramienta que descarga la versión correcta de Gradle automáticamente. Esto evita conflictos de versiones y no requiere Gradle instalado globalmente — es una best practice en Java.
+**Nota técnica:** En `product-service` se usa **Gradle Wrapper** (`./gradlew`), una herramienta que descarga la versión correcta de Gradle automáticamente. Esto evita conflictos de versiones y no requiere Gradle instalado globalmente — es una best practice en Java.
 
-### 1.1 Levantar products-java (Spring Boot + Gradle)
+### 1.1 Levantar product-service (Spring Boot + Gradle)
 
 Desde la raíz del proyecto:
 
 ```bash
-cd products-java
+cd product-service
 ./gradlew bootRun
 ```
 
@@ -171,12 +174,12 @@ Endpoints:
 - `GET http://localhost:4020/api/products`
 - `GET http://localhost:4020/api/products/{id}`
 
-### 1.2 Levantar users-nodejs (Express)
+### 1.2 Levantar user-service (Express)
 
 En otra terminal, desde la raíz del proyecto:
 
 ```bash
-cd users-nodejs
+cd user-service
 npm install
 npm start
 ```
@@ -208,8 +211,8 @@ Desde la raíz `microservicios`:
 ### 2.1 Build de imágenes
 
 ```bash
-docker build -t products-java:1.0 ./products-java
-docker build -t users-nodejs:1.0 ./users-nodejs
+docker build -t product-service:1.0 ./product-service
+docker build -t user-service:1.0 ./user-service
 ```
 
 Atajo recomendado (ambas imagenes en un solo comando):
@@ -220,62 +223,62 @@ Atajo recomendado (ambas imagenes en un solo comando):
 
 Este script construye siempre las imagenes locales con tag fijo `1.0`:
 
-- `products-java:1.0`
-- `users-nodejs:1.0`
+- `product-service:1.0`
+- `user-service:1.0`
 
 Explicacion de cada linea:
 
-- `docker build -t products-java:1.0 ./products-java`: construye la imagen de Java usando el Dockerfile dentro de `products-java` y la etiqueta como `products-java:1.0`.
-- `docker build -t users-nodejs:1.0 ./users-nodejs`: construye la imagen de Node.js usando el Dockerfile dentro de `users-nodejs` y la etiqueta como `users-nodejs:1.0`.
+- `docker build -t product-service:1.0 ./product-service`: construye la imagen de Java usando el Dockerfile dentro de `product-service` y la etiqueta como `product-service:1.0`.
+- `docker build -t user-service:1.0 ./user-service`: construye la imagen de Node.js usando el Dockerfile dentro de `user-service` y la etiqueta como `user-service:1.0`.
 
 ### 2.2 Levantar contenedores
 
 ```bash
-docker run -d --name products-java -p 4020:4020 products-java:1.0
+docker run -d --name product-service -p 4020:4020 product-service:1.0
 ```
 
 Explicacion del comando anterior:
 
 - `docker run`: crea y ejecuta un contenedor nuevo.
 - `-d`: lo deja corriendo en segundo plano.
-- `--name products-java`: nombre fijo para administrarlo facil.
+- `--name product-service`: nombre fijo para administrarlo facil.
 - `-p 4020:4020`: publica el puerto del contenedor en tu maquina.
-- `products-java:1.0`: imagen que se ejecuta.
+- `product-service:1.0`: imagen que se ejecuta.
 
 Para users con volumen al archivo JSON:
 
 ```bash
-docker run -d --name users-nodejs -p 4021:4021 \
-  -v $(pwd)/users-nodejs/data/data.json:/app/data/data.json \
-  users-nodejs:1.0
+docker run -d --name user-service -p 4021:4021 \
+  -v $(pwd)/user-service/data/data.json:/app/data/data.json \
+  user-service:1.0
 ```
 
 Explicacion del comando anterior:
 
 - `docker run`: crea y ejecuta un contenedor nuevo.
 - `-d`: lo deja corriendo en segundo plano (detached mode).
-- `--name users-nodejs`: nombre fijo del contenedor para administrarlo facil.
+- `--name user-service`: nombre fijo del contenedor para administrarlo facil.
 - `-p 4021:4021`: publica el puerto `4021` del contenedor en el puerto `4021` de tu maquina.
-- `-v $(pwd)/users-nodejs/data/data.json:/app/data/data.json`: **bind mount** — vincula el archivo del
+- `-v $(pwd)/user-service/data/data.json:/app/data/data.json`: **bind mount** — vincula el archivo del
   host directamente con el archivo del contenedor. NO es un enlace simbólico; es una conexion directa
   a nivel del kernel: son el MISMO archivo físico accesible desde dos rutas distintas.
-  - `$(pwd)/users-nodejs/data/data.json`: ruta del archivo en tu máquina (host).
+  - `$(pwd)/user-service/data/data.json`: ruta del archivo en tu máquina (host).
   - `:/app/data/data.json`: ruta donde el contenedor ve el mismo archivo.
   - Cuando el contenedor escribe en `/app/data/data.json`, los cambios se guardan en el host en
     `data/data.json` y viceversa.
   - **Persistencia**: aunque eliminemos el contenedor con `docker rm`, el archivo del host permanece
     intacto con todos los datos. El contenedor es efímero; el archivo en el host es permanente.
   - **Flujo de datos**: host → [kernel] ← contenedor. Ambos lados leen/escriben en el mismo lugar.
-- `users-nodejs:1.0`: imagen que se utiliza para crear el contenedor.
+- `user-service:1.0`: imagen que se utiliza para crear el contenedor.
 - `\`: solo permite partir el comando en varias lineas para que sea mas legible.
 
 En Windows (Git Bash), agrega `MSYS_NO_PATHCONV=1` al inicio para evitar que Git Bash
 convierta la ruta del volumen (ver seccion 0 para detalle):
 
 ```bash
-MSYS_NO_PATHCONV=1 docker run -d --name users-nodejs -p 4021:4021 \
-  -v $(pwd)/users-nodejs/data/data.json:/app/data/data.json \
-  users-nodejs:1.0
+MSYS_NO_PATHCONV=1 docker run -d --name user-service -p 4021:4021 \
+  -v $(pwd)/user-service/data/data.json:/app/data/data.json \
+  user-service:1.0
 ```
 
 **Diagrama del bind mount (persistencia de datos):**
@@ -284,7 +287,7 @@ MSYS_NO_PATHCONV=1 docker run -d --name users-nodejs -p 4021:4021 \
 flowchart TD
     A["Tu máquina Host<br/>data/data.json<br/>(archivo persistente)"] 
     K["Kernel Linux<br/>(conecta host ↔ contenedor)"]
-    B["Contenedor users-nodejs<br/>/app/data/data.json<br/>(MISMO archivo físico)<br/>Node.js lee/escribe aquí"]
+    B["Contenedor user-service<br/>/app/data/data.json<br/>(MISMO archivo físico)<br/>Node.js lee/escribe aquí"]
     
     A -->|docker run -v| K
     K -->|bind mount| B
@@ -352,8 +355,8 @@ Explicacion:
 
 Servicios publicados:
 
-- `products-java` en `http://localhost:4020`
-- `users-nodejs` en `http://localhost:4021`
+- `product-service` en `http://localhost:4020`
+- `user-service` en `http://localhost:4021`
 
 Importante sobre Docker Compose:
 
@@ -374,8 +377,8 @@ Desde la raiz `microservicios`, para borrar lo creado por este proyecto:
 
 ```bash
 docker compose down --rmi local --volumes --remove-orphans
-docker rm -f products-java users-nodejs 2>/dev/null || true
-docker rmi -f products-java:1.0 users-nodejs:1.0 2>/dev/null || true
+docker rm -f product-service user-service 2>/dev/null || true
+docker rmi -f product-service:1.0 user-service:1.0 2>/dev/null || true
 docker volume prune -f
 docker network prune -f
 ```
@@ -383,8 +386,8 @@ docker network prune -f
 Explicacion de cada linea:
 
 - `docker compose down --rmi local --volumes --remove-orphans`: detiene y borra recursos del compose, elimina imagenes locales generadas por compose, elimina volumenes declarados y contenedores huerfanos.
-- `docker rm -f products-java users-nodejs 2>/dev/null || true`: fuerza el borrado de esos contenedores por nombre; si no existen, no rompe el flujo.
-- `docker rmi -f products-java:1.0 users-nodejs:1.0 2>/dev/null || true`: elimina las imagenes etiquetadas del proyecto; si no existen, continua sin error.
+- `docker rm -f product-service user-service 2>/dev/null || true`: fuerza el borrado de esos contenedores por nombre; si no existen, no rompe el flujo.
+- `docker rmi -f product-service:1.0 user-service:1.0 2>/dev/null || true`: elimina las imagenes etiquetadas del proyecto; si no existen, continua sin error.
 - `docker volume prune -f`: borra volumenes Docker no usados por contenedores.
 - `docker network prune -f`: borra redes Docker no usadas.
 
@@ -413,17 +416,17 @@ Archivos de Kubernetes usados en esta guia:
 
 - `k8s/namespace.yaml`
 - `k8s/ingress-traefik.yaml`
-- `products-java/k8s/deployment.yaml`
-- `users-nodejs/k8s/pvc.yaml`
-- `users-nodejs/k8s/deployment.yaml`
+- `product-service/k8s/deployment.yaml`
+- `user-service/k8s/pvc.yaml`
+- `user-service/k8s/deployment.yaml`
 
 Finalidad de cada archivo:
 
 - `k8s/namespace.yaml`: crea el namespace `microservicios` para aislar todos los recursos del laboratorio.
 - `k8s/ingress-traefik.yaml`: define reglas HTTP de entrada para publicar ambos microservicios por host/path usando Traefik.
-- `products-java/k8s/deployment.yaml`: define Deployment + Service de `products-java`.
-- `users-nodejs/k8s/pvc.yaml`: solicita almacenamiento persistente para los datos de usuarios.
-- `users-nodejs/k8s/deployment.yaml`: define Deployment + Service de `users-nodejs` y monta el PVC en `/app/data`.
+- `product-service/k8s/deployment.yaml`: define Deployment + Service de `product-service`.
+- `user-service/k8s/pvc.yaml`: solicita almacenamiento persistente para los datos de usuarios.
+- `user-service/k8s/deployment.yaml`: define Deployment + Service de `user-service` y monta el PVC en `/app/data`.
 
 ---
 
@@ -504,8 +507,8 @@ sequenceDiagram
     participant Admin as Admin<br/>kubectl apply
     participant K8s as Kubernetes
     participant Deploy as Deployment
-    participant Pod as Pod<br/>users-nodejs
-    participant Svc as Service<br/>users-nodejs
+    participant Pod as Pod<br/>user-service
+    participant Svc as Service<br/>user-service
     participant Client as Client<br/>curl
     
     Admin->>K8s: kubectl apply -f deployment.yaml
@@ -516,7 +519,7 @@ sequenceDiagram
     Svc->>Pod: Se percata: hay un Pod nuevo
     Svc->>Svc: Memo: "Pod #1 → IP:4021"
     
-    Client->>Svc: curl http://users-nodejs:4021/api/users
+    Client->>Svc: curl http://user-service:4021/api/users
     Svc->>Pod: Redirige al Pod #1
     Pod->>Client: ✅ {"users": [...]}
     
@@ -528,7 +531,7 @@ sequenceDiagram
     Svc->>Pod: Se percata: Pod #2 reemplazó Pod #1
     Svc->>Svc: Actualiza: "Pod #2 → IP:4021"
     
-    Client->>Svc: curl http://users-nodejs:4021/api/users
+    Client->>Svc: curl http://user-service:4021/api/users
     Svc->>Pod: Redirige al Pod #2
     Pod->>Client: ✅ {"users": [...]}
     
@@ -553,7 +556,7 @@ sequenceDiagram
 
 Considera este escenario:
 
-> **Escenario:** Cambias el código de Node.js, recompiles la imagen (`users-nodejs:2.0`), y haces `kubectl apply -f deployment.yaml` nuevamente. El Deployment levanta un nuevo Pod con la nueva imagen.
+> **Escenario:** Cambias el código de Node.js, recompiles la imagen (`user-service:2.0`), y haces `kubectl apply -f deployment.yaml` nuevamente. El Deployment levanta un nuevo Pod con la nueva imagen.
 >
 > **Pregunta:** ¿Necesita el cliente cambiar la URL para conectarse?
 > - (A) Sí, porque la IP del Pod cambió
@@ -618,7 +621,7 @@ sequenceDiagram
     K8s->>Storage: Asigna espacio 1Gi
     
     Admin->>K8s: Paso 2: kubectl apply -f deployment.yaml
-    K8s->>NodeA: Levanta Pod users-nodejs
+    K8s->>NodeA: Levanta Pod user-service
     K8s->>Storage: Monta PVC en /app/data
     NodeA->>Storage: Pod escribe datos
     Storage->>Storage: Serializa datos en /var/lib/pvc-xxx
@@ -736,15 +739,15 @@ flowchart TD
     
     CLUSTER --> NODO1["🖥 NODO 1<br/>(Máquina física/virtual)"]
     CLUSTER --> NODO2["🖥 NODO 2<br/>(Máquina física/virtual)"]
-    CLUSTER --> INGRESS["🌐 INGRESS: micro.local<br/>Traefik - Punto entrada único<br/>/api/products → products-java<br/>/api/users → users-nodejs"]
+    CLUSTER --> INGRESS["🌐 INGRESS: micro.local<br/>Traefik - Punto entrada único<br/>/api/products → product-service<br/>/api/users → user-service"]
     
     NODO1 --> NS1["📦 Namespace: microservicios"]
     NODO2 --> NS2["📦 Namespace: microservicios"]
     
-    NS1 --> POD1["🐳 Pod: products-java-xxxxx"]
-    NS1 --> POD2["🐳 Pod: users-nodejs-xxxxx"]
-    NS1 --> SVC1["🔌 Service: products-java<br/>ClusterIP:4020"]
-    NS1 --> SVC2["🔌 Service: users-nodejs<br/>ClusterIP:4021"]
+    NS1 --> POD1["🐳 Pod: product-service-xxxxx"]
+    NS1 --> POD2["🐳 Pod: user-service-xxxxx"]
+    NS1 --> SVC1["🔌 Service: product-service<br/>ClusterIP:4020"]
+    NS1 --> SVC2["🔌 Service: user-service<br/>ClusterIP:4021"]
     NS1 --> PVC["💾 PVC: users-data-pvc<br/>1Gi storage"]
     
     POD1 --> CONT1["📝 Spring Boot Container<br/>Puerto: 4020"]
@@ -774,7 +777,7 @@ flowchart TD
 1️⃣ **Contenedor** (nivel más específico)
    - Es tu aplicación ejecutándose (Spring Boot, Express.js, etc.)
    - Puertos específicos: 4020, 4021
-   - Imagen Docker: `products-java:1.0`, `users-nodejs:1.0`
+   - Imagen Docker: `product-service:1.0`, `user-service:1.0`
 
 2️⃣ **Pod**
    - "Envase" que contiene 1+ contenedores
@@ -786,7 +789,7 @@ flowchart TD
    - Abstracción de networking
    - Expone un Pod (o grupo de Pods) en una dirección **dentro del cluster**
    - Tipo `ClusterIP`: solo accesible desde adentro del cluster
-   - Mapea: nombre interno (products-java) → IP virtual (10.0.0.x)
+   - Mapea: nombre interno (product-service) → IP virtual (10.0.0.x)
 
 ### 🏛️ Entender Namespaces: "Apartamos independientes en un mismo edificio"
 
@@ -807,10 +810,10 @@ Imagina un **edificio (Cluster)** con:
 **Namespace = Asignación de espacios por tema:**
 
 - **Namespace "microservicios"** = "Piso 1 izquierda" (toda esta zona)
-  - Apartment 1A (Pod users-nodejs en Nodo A)
-  - Apartment 1B (Pod products-java en Nodo A)
-  - Apartment 1C (Pod users-nodejs en Nodo B)
-  - Apartment 1D (Pod products-java en Nodo B)
+  - Apartment 1A (Pod user-service en Nodo A)
+  - Apartment 1B (Pod product-service en Nodo A)
+  - Apartment 1C (Pod user-service en Nodo B)
+  - Apartment 1D (Pod product-service en Nodo B)
   
   ✅ Todos en el mismo **"sector del condominio"** aunque estén en pisos diferentes
 
@@ -849,11 +852,11 @@ graph TD
     
     NODO_C --> NS_C1["📦 NS: otro-equipo"]
     
-    NS_A1 --> POD_A1["🐳 Pod: users-nodejs<br/>(en Nodo A)"]
-    NS_A1 --> POD_A2["🐳 Pod: products-java<br/>(en Nodo A)"]
+    NS_A1 --> POD_A1["🐳 Pod: user-service<br/>(en Nodo A)"]
+    NS_A1 --> POD_A2["🐳 Pod: product-service<br/>(en Nodo A)"]
     
-    NS_B1 --> POD_B1["🐳 Pod: users-nodejs<br/>(en Nodo B)"]
-    NS_B1 --> POD_B2["🐳 Pod: products-java<br/>(en Nodo B)"]
+    NS_B1 --> POD_B1["🐳 Pod: user-service<br/>(en Nodo B)"]
+    NS_B1 --> POD_B2["🐳 Pod: product-service<br/>(en Nodo B)"]
     
     NS_A2 --> POD_A3["🐳 Pod: auth<br/>(en Nodo A)"]
     
@@ -877,10 +880,10 @@ graph TD
 **Lo que ves en el diagrama:**
 
 ✅ El Namespace "microservicios" (verde) **abarca múltiples nodos:**
-- `users-nodejs` en Nodo A ✓
-- `products-java` en Nodo A ✓
-- `users-nodejs` en Nodo B ✓
-- `products-java` en Nodo B ✓
+- `user-service` en Nodo A ✓
+- `product-service` en Nodo A ✓
+- `user-service` en Nodo B ✓
+- `product-service` en Nodo B ✓
 
 Todos son parte de **lo MISMO** (mismo namespace), pero en **diferentes máquinas físicas**.
 
@@ -896,9 +899,9 @@ Significa que:
 1. **DNS compartida** 
    - Pod A en Nodo A puede llamar a Pod B en Nodo B usando:
      ```
-     curl http://products-java:4020/api/products
+     curl http://product-service:4020/api/products
      ```
-   - Kubernetes resolve `products-java` a cualquier Pod en el mismo namespace, sin importar el nodo
+   - Kubernetes resolve `product-service` a cualquier Pod en el mismo namespace, sin importar el nodo
 
 2. **Reglas de red (Network Policy) aplicadas globalmente**
    - Una regla "deniega tráfico entre namespaces" se aplica a TODOS los nodos
@@ -923,10 +926,10 @@ graph TD
     DOCKER --> NS_DEFAULT["📦 Namespace: default"]
     DOCKER --> NS_KUBE["📦 Namespace: kube-system"]
     
-    NS_MICRO --> POD1["🐳 Pod: users-nodejs"]
-    NS_MICRO --> POD2["🐳 Pod: products-java"]
-    NS_MICRO --> SVC1["🔌 Service: users-nodejs"]
-    NS_MICRO --> SVC2["🔌 Service: products-java"]
+    NS_MICRO --> POD1["🐳 Pod: user-service"]
+    NS_MICRO --> POD2["🐳 Pod: product-service"]
+    NS_MICRO --> SVC1["🔌 Service: user-service"]
+    NS_MICRO --> SVC2["🔌 Service: product-service"]
     NS_MICRO --> PVC["💾 PVC: users-data-pvc"]
     
     NS_DEFAULT --> INGRESS["🌐 Ingress: (Traefik)"]
@@ -1000,8 +1003,8 @@ Personas en la empresa:
 ### El error típico cuando RBAC no está configurado correctamente
 
 ```bash
-$ kubectl delete pod users-nodejs-xxxxx
-Error from server (Forbidden): pods "users-nodejs-xxxxx" is forbidden: 
+$ kubectl delete pod user-service-xxxxx
+Error from server (Forbidden): pods "user-service-xxxxx" is forbidden: 
 User "juan" cannot delete resource "pods" in API group "" in the namespace "microservicios"
 ```
 
@@ -1108,16 +1111,16 @@ graph TD
     A["🏢 Cluster docker-desktop<br/>(1 solo nodo)"]
     B["🖥 Nodo: docker-desktop"]
     C["📦 Namespace: microservicios"]
-    D["🐳 Pod: products-java-xxxxx"]
+    D["🐳 Pod: product-service-xxxxx"]
     E["📝 Contenedor: Spring Boot<br/>(puerto 4020)"]
-    F["🔌 Service: products-java<br/>(expone Pod)"]
-    G["🐳 Pod: users-nodejs-xxxxx"]
+    F["🔌 Service: product-service<br/>(expone Pod)"]
+    G["🐳 Pod: user-service-xxxxx"]
     H["📝 Contenedor: Express.js<br/>(puerto 4021)"]
     I["💾 Monta: PVC users-data-pvc"]
-    J["🔌 Service: users-nodejs<br/>(expone Pod)"]
+    J["🔌 Service: user-service<br/>(expone Pod)"]
     K["🌐 Ingress: micro.local"]
-    L["/api/products → products-java"]
-    M["/api/users → users-nodejs"]
+    L["/api/products → product-service"]
+    M["/api/users → user-service"]
     N["💾 PVC: users-data-pvc<br/>(1Gi storage)"]
     O["🚀 Traefik<br/>(controlador Ingress)"]
     
@@ -1196,14 +1199,14 @@ Requisitos para esta seccion:
 Build local de imagenes:
 
 ```bash
-docker build -t products-java:1.0 ./products-java
-docker build -t users-nodejs:1.0 ./users-nodejs
+docker build -t product-service:1.0 ./product-service
+docker build -t user-service:1.0 ./user-service
 ```
 
 Explicacion:
 
-- `docker build -t products-java:1.0 ./products-java`: construye imagen local de Java.
-- `docker build -t users-nodejs:1.0 ./users-nodejs`: construye imagen local de Node.js.
+- `docker build -t product-service:1.0 ./product-service`: construye imagen local de Java.
+- `docker build -t user-service:1.0 ./user-service`: construye imagen local de Node.js.
 - Estas imagenes son automaticamente visibles para el cluster de Docker Desktop.
 
 Validacion:
@@ -1221,10 +1224,10 @@ Si necesitas trabajar con un registry remoto (opcional), entonces si aplica `TU_
 
 ```bash
 docker login
-docker build -t TU_USUARIO/products-java:1.0 ./products-java
-docker build -t TU_USUARIO/users-nodejs:1.0 ./users-nodejs
-docker push TU_USUARIO/products-java:1.0
-docker push TU_USUARIO/users-nodejs:1.0
+docker build -t TU_USUARIO/product-service:1.0 ./product-service
+docker build -t TU_USUARIO/user-service:1.0 ./user-service
+docker push TU_USUARIO/product-service:1.0
+docker push TU_USUARIO/user-service:1.0
 ```
 
 Explicacion:
@@ -1236,8 +1239,8 @@ Explicacion:
 
 En este proyecto los manifests ya vienen configurados para Docker Desktop (local):
 
-- `products-java:1.0`
-- `users-nodejs:1.0`
+- `product-service:1.0`
+- `user-service:1.0`
 
 Con Docker Desktop, estas imagenes son automaticamente accesibles para el cluster. Si usas un
 registry remoto, cambia esos valores en los deployments por tus imagenes publicadas.
@@ -1290,9 +1293,9 @@ Desde la raiz `microservicios`:
 
 ```bash
 kubectl apply -f k8s/namespace.yaml
-kubectl apply -f users-nodejs/k8s/pvc.yaml
-kubectl apply -f products-java/k8s/deployment.yaml
-kubectl apply -f users-nodejs/k8s/deployment.yaml
+kubectl apply -f user-service/k8s/pvc.yaml
+kubectl apply -f product-service/k8s/deployment.yaml
+kubectl apply -f user-service/k8s/deployment.yaml
 ```
 
 Explicacion de cada linea:
@@ -1300,16 +1303,16 @@ Explicacion de cada linea:
 - `kubectl apply`: crea o actualiza recursos declarados en un archivo YAML.
 - `-f`: indica el archivo a aplicar.
 - `k8s/namespace.yaml`: crea namespace `microservicios`.
-- `users-nodejs/k8s/pvc.yaml`: crea el PVC para persistencia de usuarios.
-- `products-java/k8s/deployment.yaml`: crea/actualiza Deployment + Service de products.
-- `users-nodejs/k8s/deployment.yaml`: crea/actualiza Deployment + Service de users.
+- `user-service/k8s/pvc.yaml`: crea el PVC para persistencia de usuarios.
+- `product-service/k8s/deployment.yaml`: crea/actualiza Deployment + Service de products.
+- `user-service/k8s/deployment.yaml`: crea/actualiza Deployment + Service de users.
 
 Por que este orden es necesario:
 
 - `k8s/namespace.yaml` va primero porque todos los demas recursos se crean dentro de `microservicios`; si el namespace no existe, los apply siguientes fallan.
-- `users-nodejs/k8s/pvc.yaml` va antes del deployment de users porque el Pod necesita ese claim para montar `/app/data`; si el PVC no existe, el Pod puede quedar en estado pendiente o con error de montaje.
-- `products-java/k8s/deployment.yaml` crea el servicio de products y su Pod; se aplica despues del namespace para asegurar aislamiento y nombres consistentes.
-- `users-nodejs/k8s/deployment.yaml` se aplica al final para que encuentre el PVC ya creado y pueda iniciar con persistencia activa desde el primer arranque.
+- `user-service/k8s/pvc.yaml` va antes del deployment de users porque el Pod necesita ese claim para montar `/app/data`; si el PVC no existe, el Pod puede quedar en estado pendiente o con error de montaje.
+- `product-service/k8s/deployment.yaml` crea el servicio de products y su Pod; se aplica despues del namespace para asegurar aislamiento y nombres consistentes.
+- `user-service/k8s/deployment.yaml` se aplica al final para que encuentre el PVC ya creado y pueda iniciar con persistencia activa desde el primer arranque.
 
 En resumen, la secuencia evita errores de dependencias: primero contenedor logico (namespace), luego almacenamiento (PVC), y despues workloads (deployments/services).
 
@@ -1355,15 +1358,15 @@ Explicacion rapida:
 Abre dos terminales:
 
 ```bash
-kubectl port-forward svc/products-java 4020:4020 -n microservicios
-kubectl port-forward svc/users-nodejs 4021:4021 -n microservicios
+kubectl port-forward svc/product-service 4020:4020 -n microservicios
+kubectl port-forward svc/user-service 4021:4021 -n microservicios
 ```
 
 Explicacion:
 
 - `kubectl port-forward`: expone temporalmente un servicio del cluster en tu maquina local.
-- `svc/products-java`: service de destino de products.
-- `svc/users-nodejs`: service de destino de users.
+- `svc/product-service`: service de destino de products.
+- `svc/user-service`: service de destino de users.
 - `4020:4020` y `4021:4021`: puerto local:puerto remoto del service.
 - `-n microservicios`: namespace donde estan los servicios.
 - Estos comandos quedan en primer plano; usa una terminal por servicio.
@@ -1383,20 +1386,20 @@ Explicacion:
 
 ### 4.6 📈 Escalado: demostración de multi-replica (bonus)
 
-Este paso permite mostrar que puedes tener varias replicas de cada app y, aun asi, seguir teniendo solo dos microservicios logicos (`products-java` y `users-nodejs`).
+Este paso permite mostrar que puedes tener varias replicas de cada app y, aun asi, seguir teniendo solo dos microservicios logicos (`product-service` y `user-service`).
 
 Escalar deployments a 3 replicas:
 
 ```bash
-kubectl scale deployment/products-java --replicas=3 -n microservicios
-kubectl scale deployment/users-nodejs --replicas=3 -n microservicios
+kubectl scale deployment/product-service --replicas=3 -n microservicios
+kubectl scale deployment/user-service --replicas=3 -n microservicios
 ```
 
 Explicacion:
 
 - `kubectl scale`: cambia la cantidad de pods de un Deployment.
-- `deployment/products-java`: deployment que se escala.
-- `deployment/users-nodejs`: deployment que se escala.
+- `deployment/product-service`: deployment que se escala.
+- `deployment/user-service`: deployment que se escala.
 - `--replicas=3`: cantidad objetivo de pods.
 - `-n microservicios`: namespace donde viven los deployments.
 
@@ -1412,14 +1415,14 @@ Que deberias observar:
 
 - En `deployments`, cada servicio muestra `3/3` replicas listas.
 - En `pods`, aparecen 3 pods para products y 3 pods para users.
-- En `svc`, siguen existiendo solo 2 servicios (`products-java` y `users-nodejs`).
+- En `svc`, siguen existiendo solo 2 servicios (`product-service` y `user-service`).
 - Conclusion: hay mas instancias (pods), pero la cantidad de microservicios logicos no cambia.
 
 Volver a 1 replica por servicio:
 
 ```bash
-kubectl scale deployment/products-java --replicas=1 -n microservicios
-kubectl scale deployment/users-nodejs --replicas=1 -n microservicios
+kubectl scale deployment/product-service --replicas=1 -n microservicios
+kubectl scale deployment/user-service --replicas=1 -n microservicios
 ```
 
 ### 4.7 🌐 Ingress + Traefik: acceso desde navegador con dominio local
@@ -1512,7 +1515,7 @@ flowchart LR
     PORT["🔌 Puerto 80<br/>(tu Mac)"]
     LB["⚖️ svclb-traefik<br/>(entra al cluster)"]
     TRAEFIK["🚦 Traefik Pod<br/>(lee Ingress)<br/>decide destino por path"]
-    SVC["🔌 Service<br/>products-java:4020<br/>(ClusterIP interno)"]
+    SVC["🔌 Service<br/>product-service:4020<br/>(ClusterIP interno)"]
     POD["🐳 Pod Spring Boot<br/>puerto 4020<br/>responde"]
     
     USER -->|localhost:80| PORT
@@ -1539,7 +1542,7 @@ kubectl get ingress -n microservicios
 
 `kubectl apply -f k8s/ingress-traefik.yaml` registra en el cluster las reglas de enrutamiento
 definidas en el YAML: le dice a Traefik que cuando llegue una request con el host `micro.local`
-y el path `/api/products`, la derive al Service `products-java`, y lo mismo para `/api/users`.
+y el path `/api/products`, la derive al Service `product-service`, y lo mismo para `/api/users`.
 Sin aplicar este archivo, Traefik no sabe nada de tus microservicios; solo tiene el controlador
 activo pero sin reglas configuradas.
 
@@ -1688,9 +1691,9 @@ kubectl get secret users-api-secret -n microservicios
 kubectl describe secret users-api-secret -n microservicios
 ```
 
-3. Inyectar el Secret como variable de entorno en `users-nodejs`.
+3. Inyectar el Secret como variable de entorno en `user-service`.
 
-Agrega este bloque dentro del contenedor en `users-nodejs/k8s/deployment.yaml`:
+Agrega este bloque dentro del contenedor en `user-service/k8s/deployment.yaml`:
 
 ```yaml
 env:
@@ -1706,7 +1709,7 @@ env:
 Luego reaplica el deployment:
 
 ```bash
-kubectl apply -f users-nodejs/k8s/deployment.yaml
+kubectl apply -f user-service/k8s/deployment.yaml
 ```
 
 4. Probar que ambas variables existen en el pod.
@@ -1779,26 +1782,26 @@ flowchart TB
   end
 
   subgraph K8s[Namespace: microservicios]
-    SP[Service products-java ClusterIP:4020]
-    SU[Service users-nodejs ClusterIP:4021]
+    SP[Service product-service ClusterIP:4020]
+    SU[Service user-service ClusterIP:4021]
 
-    DP[Deployment products-java]
-    DU[Deployment users-nodejs]
+    DP[Deployment product-service]
+    DU[Deployment user-service]
 
-    PP1[Pod products-java #1]
-    PP2[Pod products-java #2 optional scale]
-    PU1[Pod users-nodejs #1]
-    PU2[Pod users-nodejs #2 optional scale]
+    PP1[Pod product-service #1]
+    PP2[Pod product-service #2 optional scale]
+    PU1[Pod user-service #1]
+    PU2[Pod user-service #2 optional scale]
 
     PVC[PVC users-data-pvc]
     PV[(Persistent Volume)]
   end
 
   subgraph Build[Build local]
-    DJ[Dockerfile products-java]
-    DN[Dockerfile users-nodejs]
-    IMJ[Imagen products-java:1.0]
-    IMN[Imagen users-nodejs:1.0]
+    DJ[Dockerfile product-service]
+    DN[Dockerfile user-service]
+    IMJ[Imagen product-service:1.0]
+    IMN[Imagen user-service:1.0]
   end
 
   U --> T
@@ -1830,9 +1833,9 @@ Desde la raiz `microservicios`:
 
 ```bash
 kubectl delete -f k8s/ingress-traefik.yaml --ignore-not-found
-kubectl delete -f users-nodejs/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f products-java/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f users-nodejs/k8s/pvc.yaml --ignore-not-found
+kubectl delete -f user-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f product-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f user-service/k8s/pvc.yaml --ignore-not-found
 kubectl delete -f k8s/namespace.yaml --ignore-not-found
 ```
 
@@ -1842,9 +1845,9 @@ Explicacion de cada linea:
 - `-f`: indica el archivo fuente.
 - `--ignore-not-found`: evita error si el recurso ya no existe.
 - `k8s/ingress-traefik.yaml`: elimina las reglas de enrutamiento del Ingress de Traefik.
-- `users-nodejs/k8s/deployment.yaml`: elimina Deployment + Service de users y sus Pods.
-- `products-java/k8s/deployment.yaml`: elimina Deployment + Service de products y sus Pods.
-- `users-nodejs/k8s/pvc.yaml`: elimina el PVC de users. Los datos del volumen dependen de
+- `user-service/k8s/deployment.yaml`: elimina Deployment + Service de users y sus Pods.
+- `product-service/k8s/deployment.yaml`: elimina Deployment + Service de products y sus Pods.
+- `user-service/k8s/pvc.yaml`: elimina el PVC de users. Los datos del volumen dependen de
   la reclaim policy del StorageClass (`local-path` los elimina junto con el PVC).
 - `k8s/namespace.yaml`: elimina el namespace `microservicios` y todo lo que quede dentro
   en cascada (Services, ConfigMaps, Pods remanentes, etc.).
@@ -1892,7 +1895,7 @@ Explicacion:
 Opcional: limpiar imagenes locales Docker despues del laboratorio:
 
 ```bash
-docker rmi -f products-java:1.0 users-nodejs:1.0 2>/dev/null || true
+docker rmi -f product-service:1.0 user-service:1.0 2>/dev/null || true
 docker image prune -f
 ```
 
@@ -1903,32 +1906,32 @@ Explicacion:
   este redireccionamiento funciona igual que en macOS/Linux.
 - `docker image prune -f`: elimina imagenes sin tag no usadas por ningun contenedor.
 
-### 4.10 🧪 Bonus: ¿Cómo dar acceso del JSON a `products-java`?
+### 4.10 🧪 Bonus: ¿Cómo dar acceso del JSON a `product-service`?
 
 Pregunta frecuente:
 
-> "Si `users-nodejs` guarda datos en `data.json`, ¿puede `products-java` leer ese mismo archivo?"
+> "Si `user-service` guarda datos en `data.json`, ¿puede `product-service` leer ese mismo archivo?"
 
 Respuesta corta:
 - **Sí, técnicamente es posible** en Docker run, Docker Compose y Kubernetes.
 - **Pero no es lo recomendado** para microservicios en producción.
-- Recomendación arquitectónica: `products-java` debería consumir datos por API de `users-nodejs`, no por archivo compartido.
+- Recomendación arquitectónica: `product-service` debería consumir datos por API de `user-service`, no por archivo compartido.
 
 #### Estado actual del proyecto
 
 Con la configuración actual:
-- `users-nodejs` sí monta el archivo/persistencia de usuarios.
-- `products-java` no monta ese volumen.
-- Por lo tanto, hoy `products-java` **no puede** leer `data.json` por filesystem.
+- `user-service` sí monta el archivo/persistencia de usuarios.
+- `product-service` no monta ese volumen.
+- Por lo tanto, hoy `product-service` **no puede** leer `data.json` por filesystem.
 
 #### A) Dockerfile / docker run (sí es posible)
 
 Puedes montar el mismo archivo host también en el contenedor Java:
 
 ```bash
-docker run -d --name products-java -p 4020:4020 \
-  -v $(pwd)/users-nodejs/data/data.json:/app/shared/users.json:ro \
-  products-java:1.0
+docker run -d --name product-service -p 4020:4020 \
+  -v $(pwd)/user-service/data/data.json:/app/shared/users.json:ro \
+  product-service:1.0
 ```
 
 Notas:
@@ -1941,13 +1944,13 @@ En `docker-compose.yml`, monta el mismo volumen en ambos servicios:
 
 ```yaml
 services:
-  users-nodejs:
+  user-service:
     volumes:
-      - ./users-nodejs/data/data.json:/app/data/data.json
+      - ./user-service/data/data.json:/app/data/data.json
 
-  products-java:
+  product-service:
     volumes:
-      - ./users-nodejs/data/data.json:/app/shared/users.json:ro
+      - ./user-service/data/data.json:/app/shared/users.json:ro
 ```
 
 Notas:
@@ -1956,16 +1959,16 @@ Notas:
 
 #### C) Kubernetes (sí es posible, con consideraciones)
 
-Puedes montar el mismo PVC en `products-java`.
+Puedes montar el mismo PVC en `product-service`.
 
-Ejemplo en `products-java/k8s/deployment.yaml`:
+Ejemplo en `product-service/k8s/deployment.yaml`:
 
 ```yaml
 spec:
   template:
     spec:
       containers:
-        - name: products-java
+        - name: product-service
           volumeMounts:
             - name: users-shared-data
               mountPath: /app/shared
@@ -1988,7 +1991,7 @@ Consideraciones reales:
 
 Ejemplo práctico:
 
-1. Si `users-nodejs` y `products-java` estan en el **mismo nodo**:
+1. Si `user-service` y `product-service` estan en el **mismo nodo**:
   - Con `ReadWriteOnce` normalmente ambos pods pueden montar el volumen sin problema.
 
 2. Si Kubernetes agenda un pod en **otro nodo distinto**:
@@ -2063,8 +2066,8 @@ Ambos coexisten sin solaparse:
 Browser
   └─► Traefik (edge del cluster, TLS, entrada)
         └─► KrakenD (API Gateway: auth, rate limit, agregación)
-              ├─► products-java:4020
-              └─► users-nodejs:4021
+              ├─► product-service:4020
+              └─► user-service:4021
 ```
 
 KrakenD es **stateless**: no tiene base de datos. Toda su configuración vive en un archivo
@@ -2102,7 +2105,7 @@ a la imagen final.
 
 ```
 microservicios/
-├── frontend-react/
+├── frontend-service/
 │   ├── Dockerfile              ← multi-stage: node build → nginx serve
 │   ├── nginx.conf              ← fallback a index.html para React Router
 │   ├── package.json
@@ -2137,12 +2140,12 @@ flowchart TB
     I[Ingress v2
     host: micro.local
     /api → krakend
-    / → frontend-react]
+    / → frontend-service]
   end
 
   subgraph K8s[Namespace: microservicios]
-    FE[Service frontend-react ClusterIP:80]
-    DFE[Deployment frontend-react]
+    FE[Service frontend-service ClusterIP:80]
+    DFE[Deployment frontend-service]
     PFE[Pod nginx sirviendo dist/]
 
     GW[Service krakend ClusterIP:8080]
@@ -2150,13 +2153,13 @@ flowchart TB
     PGW[Pod KrakenD]
     CM[ConfigMap krakend-config]
 
-    SP[Service products-java ClusterIP:4020]
-    DP[Deployment products-java]
-    PP[Pod products-java]
+    SP[Service product-service ClusterIP:4020]
+    DP[Deployment product-service]
+    PP[Pod product-service]
 
-    SU[Service users-nodejs ClusterIP:4021]
-    DU[Deployment users-nodejs]
-    PU[Pod users-nodejs]
+    SU[Service user-service ClusterIP:4021]
+    DU[Deployment user-service]
+    PU[Pod user-service]
     PVC[PVC users-data-pvc]
   end
 
@@ -2181,7 +2184,7 @@ flowchart TB
 #### Paso 1: Construir las imágenes
 
 ```bash
-docker build -t frontend-react:1.0 ./frontend-react
+docker build -t frontend-service:1.0 ./frontend-service
 ```
 
 KrakenD usa la imagen oficial `devopsfaith/krakend:2.7` — no necesita build local.
@@ -2201,11 +2204,11 @@ Explicacion:
 #### Paso 3: Aplicar el manifest del frontend
 
 ```bash
-kubectl apply -f frontend-react/k8s/deployment.yaml
+kubectl apply -f frontend-service/k8s/deployment.yaml
 ```
 
 Explicacion:
-- Crea el Deployment de nginx con la imagen `frontend-react:1.0`.
+- Crea el Deployment de nginx con la imagen `frontend-service:1.0`.
 - Crea el Service ClusterIP que Traefik usará para enrutar `/`.
 
 #### Paso 4: Reemplazar el Ingress (el único cambio visible para el cluster)
@@ -2222,11 +2225,11 @@ y actualiza sus rutas automáticamente.
 
 | Path | Ingress v1 (Fase 4) | Ingress v2 (Fase 5) |
 |---|---|---|
-| `/api/products` | → products-java:4020 | — |
-| `/api/users` | → users-nodejs:4021 | — |
+| `/api/products` | → product-service:4020 | — |
+| `/api/users` | → user-service:4021 | — |
 | `/api` (todo) | — | → krakend:8080 |
-| `/health` | → users-nodejs:4021 | → krakend:8080 |
-| `/` | — | → frontend-react:80 |
+| `/health` | → user-service:4021 | → krakend:8080 |
+| `/` | — | → frontend-service:80 |
 
 #### Paso 5: Verificar que todos los pods están Running
 
@@ -2238,10 +2241,10 @@ Deberías ver estos 4 pods:
 
 ```
 NAME                              READY   STATUS    RESTARTS
-frontend-react-xxxxx              1/1     Running   0
+frontend-service-xxxxx              1/1     Running   0
 krakend-xxxxx                     1/1     Running   0
-products-java-xxxxx               1/1     Running   0
-users-nodejs-xxxxx                1/1     Running   0
+product-service-xxxxx               1/1     Running   0
+user-service-xxxxx                1/1     Running   0
 ```
 
 #### Paso 6: Probar el sistema completo
@@ -2272,7 +2275,7 @@ Para iterar en el frontend sin necesitar Kubernetes:
 docker compose up -d
 
 # Terminal 2: frontend en modo dev
-cd frontend-react
+cd frontend-service
 npm install
 npm run dev
 # → http://localhost:3000
@@ -2335,7 +2338,7 @@ kubectl delete -f krakend/k8s/deployment.yaml --ignore-not-found
 kubectl delete -f krakend/k8s/krakend-config.yaml --ignore-not-found
 
 # Eliminar frontend
-kubectl delete -f frontend-react/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f frontend-service/k8s/deployment.yaml --ignore-not-found
 ```
 
 Para desmantelar todo (Fases 4 y 5 juntas):
@@ -2344,17 +2347,17 @@ Para desmantelar todo (Fases 4 y 5 juntas):
 kubectl delete -f k8s/ingress-traefik-v2-gateway.yaml --ignore-not-found
 kubectl delete -f krakend/k8s/deployment.yaml --ignore-not-found
 kubectl delete -f krakend/k8s/krakend-config.yaml --ignore-not-found
-kubectl delete -f frontend-react/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f users-nodejs/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f products-java/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f users-nodejs/k8s/pvc.yaml --ignore-not-found
+kubectl delete -f frontend-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f user-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f product-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f user-service/k8s/pvc.yaml --ignore-not-found
 kubectl delete -f k8s/namespace.yaml --ignore-not-found
 ```
 
 Limpiar imágenes locales:
 
 ```bash
-docker rmi -f frontend-react:1.0 products-java:1.0 users-nodejs:1.0 2>/dev/null || true
+docker rmi -f frontend-service:1.0 product-service:1.0 user-service:1.0 2>/dev/null || true
 ```
 
 ---
@@ -2468,7 +2471,7 @@ bash scripts/teardown.sh
 
 La cadena completa es:
 ```
-Browser → Traefik → KrakenD → cart-service:4022 → products-java:4020
+Browser → Traefik → KrakenD → cart-service:4022 → product-service:4020
 ```
 
 ### Stack técnico
@@ -2496,7 +2499,7 @@ Browser → Traefik → KrakenD → cart-service:4022 → products-java:4020
 | Campo | Tipo | Restricción |
 |---|---|---|
 | `user_id` | INTEGER | FK implícita al `sub` del JWT |
-| `product_id` | INTEGER | ID del producto en products-java |
+| `product_id` | INTEGER | ID del producto en product-service |
 | `quantity` | INTEGER | > 0 |
 | `(user_id, product_id)` | UNIQUE | evita duplicados |
 
@@ -2578,10 +2581,10 @@ Dentro de `cart-service/src/routes/cart.py`, la función `fetch_product()` hace 
 
 ```python
 async with httpx.AsyncClient(timeout=3.0) as client:
-    r = await client.get(f"http://products-java:4020/api/products/{product_id}")
+    r = await client.get(f"http://product-service:4020/api/products/{product_id}")
 ```
 
-`products-java` resuelve al Service de Kubernetes del mismo nombre, en el namespace `microservicios`. Esta comunicación ocurre **dentro del cluster**, sin pasar por Traefik ni KrakenD.
+`product-service` resuelve al Service de Kubernetes del mismo nombre, en el namespace `microservicios`. Esta comunicación ocurre **dentro del cluster**, sin pasar por Traefik ni KrakenD.
 
 ### Rollback Fase 7 → Fase 6
 
@@ -2627,7 +2630,7 @@ graph TB
         end
 
         subgraph FRONT["Frontend"]
-            NGINX["frontend-react\nnginx :80"]
+            NGINX["frontend-service\nnginx :80"]
         end
 
         subgraph AUTH["Auth Service (Fase 6)"]
@@ -2643,8 +2646,8 @@ graph TB
         end
 
         subgraph MS["Microservicios"]
-            JAVA["products-java\nSpring Boot :4020"]
-            NODE["users-nodejs\nExpress :4021"]
+            JAVA["product-service\nSpring Boot :4020"]
+            NODE["user-service\nExpress :4021"]
             PVC["PVC: users-data\n1Gi"]
         end
     end
@@ -2681,7 +2684,7 @@ graph TB
 
 ### Diagrama 2 — Flujo completo de una petición del carrito
 
-Muestra cómo fluye `GET /api/cart` desde el browser hasta enriquecer la respuesta con datos de `products-java`.
+Muestra cómo fluye `GET /api/cart` desde el browser hasta enriquecer la respuesta con datos de `product-service`.
 
 ```mermaid
 sequenceDiagram
@@ -2689,7 +2692,7 @@ sequenceDiagram
     participant T as Traefik<br/>Ingress
     participant K as KrakenD<br/>:8080
     participant C as cart-service<br/>FastAPI :4022
-    participant P as products-java<br/>Spring Boot :4020
+    participant P as product-service<br/>Spring Boot :4020
     participant DB as cart-postgres<br/>PostgreSQL
 
     U->>T: GET /api/cart<br/>Authorization: Bearer JWT
@@ -2704,7 +2707,7 @@ sequenceDiagram
     DB-->>C: [{product_id:2, qty:3}, ...]
 
     loop Por cada ítem del carrito
-        C->>P: GET /api/products/2<br/>(DNS interno: products-java:4020)
+        C->>P: GET /api/products/2<br/>(DNS interno: product-service:4020)
         P-->>C: {id:2, name:"Laptop", price:999.99}
     end
 
@@ -2761,10 +2764,10 @@ Muestra qué objeto Kubernetes se despliega en cada fase del laboratorio.
 graph LR
     subgraph F4["Fase 4 — Kubernetes base"]
         NS["Namespace\nmicroservicios"]
-        D1["Deployment\nproducts-java"]
-        S1["Service\nproducts-java :4020"]
-        D2["Deployment\nusers-nodejs"]
-        S2["Service\nusers-nodejs :4021"]
+        D1["Deployment\nproduct-service"]
+        S1["Service\nproduct-service :4020"]
+        D2["Deployment\nuser-service"]
+        S2["Service\nuser-service :4021"]
         PVC1["PVC\nusers-data 1Gi"]
         I1["Ingress\nmicro.local → svcs"]
     end
@@ -2773,8 +2776,8 @@ graph LR
         CM["ConfigMap\nkrakend.json"]
         D3["Deployment\nkrakend"]
         S3["Service\nkrakend :8080"]
-        D4["Deployment\nfrontend-react"]
-        S4["Service\nfrontend-react :80"]
+        D4["Deployment\nfrontend-service"]
+        S4["Service\nfrontend-service :80"]
         I2["Ingress v2\n/api→krakend /→frontend"]
     end
 
@@ -2833,10 +2836,10 @@ graph TD
     ML -->|"GET /auth/me 🔐"| AU
     ML -->|"GET /auth/health"| AU
 
-    ML -->|"GET /"| FE["frontend-react :80"]
+    ML -->|"GET /"| FE["frontend-service :80"]
 
-    KR -->|"productos"| PJ["products-java :4020"]
-    KR -->|"usuarios"| UN["users-nodejs :4021"]
+    KR -->|"productos"| PJ["product-service :4020"]
+    KR -->|"usuarios"| UN["user-service :4021"]
     KR -->|"carrito"| CS["cart-service :4022"]
 
     CS -.->|"HTTP interno\nfetch_product()"| PJ
@@ -2896,7 +2899,7 @@ Este laboratorio entrega una base muy sólida, pero en industria todavía faltan
 Después de completar este laboratorio, deberías entender:
 
 ### 1️⃣ Concepto: Microservicios vs monolito
-- Este proyecto muestra **cuatro servicios principales** (`products-java`, `users-nodejs`, `auth-service`, `cart-service`) que podrían ser un solo monolito.
+- Este proyecto muestra **cuatro servicios principales** (`product-service`, `user-service`, `auth-service`, `cart-service`) que podrían ser un solo monolito.
 - **Ventaja:** Equipos separados pueden trabajar en paralelo, escalar servicios individuales, usar diferentes lenguajes.
 - **Desventaja:** Más complejidad operacional, necesitas orquestar la comunicación entre servicios.
 
@@ -2913,14 +2916,14 @@ Después de completar este laboratorio, deberías entender:
 ### 4️⃣ Persistencia: Bind mounts → PVC
 - En Docker: **bind mount** = vincula archivo host ↔ contenedor (temporal, no es portátil).
 - En Kubernetes: **PVC** = solicita almacenamiento persistente (agnóstico del nodo, portable).
-- Aprendiste que los datos en memoria de un contenedor se pierden si reinicia → necesitas persistencia; en este laboratorio se aplicó en `users-nodejs`, `auth-service` y `cart-service`.
+- Aprendiste que los datos en memoria de un contenedor se pierden si reinicia → necesitas persistencia; en este laboratorio se aplicó en `user-service`, `auth-service` y `cart-service`.
 
 ### 5️⃣ Networking: Localhost → Ingress → API Gateway
 - Fase 1-2: Accedías servicios en `localhost:4020` (desarrollo local).
 - Fase 3: Docker Compose las exponía automáticamente.
 - Fase 4: **Kubernetes + Ingress + Traefik** = punto único de entrada + routing inteligente.
 - Fase 5: **KrakenD** como API Gateway centraliza auth, rate limiting y transformacion. **nginx** sirve el frontend React estático. El e2e queda completo: browser → Traefik → KrakenD → microservicios.
-- Fase 7: **cart-service** llama a **products-java** internamente (DNS de cluster). Esta es la comunicación inter-microservicio real, directa, sin pasar por el API Gateway.
+- Fase 7: **cart-service** llama a **product-service** internamente (DNS de cluster). Esta es la comunicación inter-microservicio real, directa, sin pasar por el API Gateway.
 
 ### 5.1️⃣ Autenticación y autorización básica con JWT
 - Implementaste `auth-service` con `register`, `login` y `me`, usando bcrypt + JWT.
@@ -2950,7 +2953,7 @@ Después de completar este laboratorio, deberías entender:
 
 ## 💡 Próximos pasos sugeridos
 
-1. **Completar persistencia en todos los dominios:** `auth-service` y `cart-service` ya usan PostgreSQL; como siguiente paso, migrar también `products-java` y/o `users-nodejs` a base de datos real.
+1. **Completar persistencia en todos los dominios:** `auth-service` y `cart-service` ya usan PostgreSQL; como siguiente paso, migrar también `product-service` y/o `user-service` a base de datos real.
 2. **CI/CD real:** Agregar GitHub Actions para build, test, escaneo y deploy automático por rama/tag.
 3. **Observabilidad completa:** Integrar métricas y logs centralizados (Prometheus/Grafana + stack de logs).
 4. **Validación JWT en KrakenD:** Mover parte de la validación al gateway para simplificar microservicios.

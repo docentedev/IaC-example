@@ -132,7 +132,7 @@ function AuthPanel() {
 // Cuando el usuario NO está logueado, el panel se muestra deshabilitado
 // (para que el alumno vea la integración incluso antes de autenticarse).
 // Los datos del carrito se enriquecen con info del producto en el back-end
-// (cart-service llama internamente a products-java: comunicación inter-servicio).
+// (cart-service llama internamente a product-service: comunicación inter-servicio).
 function CartPanel({ onAddToCart }) {
   const { isLoggedIn, token } = useAuth()
   const [cart, setCart]       = useState(null)
@@ -196,7 +196,7 @@ function CartPanel({ onAddToCart }) {
       {!isLoggedIn && (
         <p style={{ color: '#888' }}>
           Inicia sesión para ver tu carrito. Este panel consume <strong>cart-service</strong>{' '}
-          (FastAPI/Python) que a su vez llama a <strong>products-java</strong> internamente.
+          (FastAPI/Python) que a su vez llama a <strong>product-service</strong> internamente.
         </p>
       )}
 
@@ -258,13 +258,13 @@ export default function App() {
       .then((r) => r.json())
       .then(normalizeListPayload)
       .then(setProducts)
-      .catch(() => setProducts({ error: 'No se pudo conectar con products-java' }))
+      .catch(() => setProducts({ error: 'No se pudo conectar con product-service' }))
 
     fetch(`${BASE_URL}/users`)
       .then((r) => r.json())
       .then(normalizeListPayload)
       .then(setUsers)
-      .catch(() => setUsers({ error: 'No se pudo conectar con users-nodejs' }))
+      .catch(() => setUsers({ error: 'No se pudo conectar con user-service' }))
   }, [])
 
   async function addToCart(product_id) {
@@ -298,7 +298,7 @@ export default function App() {
       <CartPanel onAddToCart={refreshCart} />
 
       <Section
-        title="Productos (products-java)"
+        title="Productos (product-service)"
         items={products}
         renderItem={(p) => (
           <span>
@@ -316,7 +316,7 @@ export default function App() {
       />
 
       <Section
-        title="Usuarios (users-nodejs)"
+        title="Usuarios (user-service)"
         items={users}
         renderItem={(u) => `[${u.id}] ${u.name} — ${u.email}`}
       />

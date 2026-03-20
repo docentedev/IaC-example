@@ -11,7 +11,7 @@ app.get("/api/users/:id", usersController.getUserById);
 app.post("/api/users", usersController.postUser);
 
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "UP", service: "users-nodejs" });
+  res.status(200).json({ status: "UP", service: "user-service" });
 });
 
 app.listen(port, () => {

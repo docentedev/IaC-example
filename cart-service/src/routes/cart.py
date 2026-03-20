@@ -1,7 +1,7 @@
 """
 Rutas del carrito de compras.
 
-Patrón clave: GET /cart llama internamente a products-java para enriquecer
+Patrón clave: GET /cart llama internamente a product-service para enriquecer
 cada ítem con los datos reales del producto (nombre, precio).
 Esto demuestra comunicación inter-microservicio dentro del cluster de Kubernetes.
 """
@@ -16,8 +16,8 @@ from ..auth import get_current_user
 router = APIRouter(prefix="/cart", tags=["cart"])
 
 # URL interna del microservicio de productos (DNS de Kubernetes).
-# Dentro del cluster, 'products-java' resuelve al Service del mismo nombre.
-PRODUCTS_BASE_URL = os.environ.get("PRODUCTS_SERVICE_URL", "http://products-java:4020")
+# Dentro del cluster, 'product-service' resuelve al Service del mismo nombre.
+PRODUCTS_BASE_URL = os.environ.get("PRODUCTS_SERVICE_URL", "http://product-service:4020")
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -30,11 +30,11 @@ class UpdateQuantityRequest(BaseModel):
     quantity: int
 
 
-# ── Helper: obtener un producto de products-java ──────────────────────────────
+# ── Helper: obtener un producto de product-service ──────────────────────────────
 
 async def fetch_product(product_id: int) -> dict | None:
     """
-    Llama a products-java internamente para obtener nombre y precio.
+    Llama a product-service internamente para obtener nombre y precio.
     Retorna None si el producto no existe.
     """
     async with httpx.AsyncClient(timeout=3.0) as client:
@@ -85,7 +85,7 @@ async def get_cart(user: dict = Depends(get_current_user)):
     """
     Devuelve el carrito completo enriquecido con datos del producto.
 
-    Para cada ítem llama a products-java:4020 (comunicación inter-microservicio).
+    Para cada ítem llama a product-service:4020 (comunicación inter-microservicio).
     Incluye subtotal por ítem y total general.
     """
     user_id = int(user["sub"])

@@ -25,7 +25,7 @@ spec:
       http:
         paths:
           # Todo el trafico de API pasa por KrakenD (API Gateway).
-          # KrakenD internamente enruta a products-java y users-nodejs.
+          # KrakenD internamente enruta a product-service y user-service.
           # Orden importa: rutas mas especificas antes de la raiz.
           - path: /api
             # Prefix coincide con /api, /api/products, /api/users, etc.
@@ -37,7 +37,7 @@ spec:
                 port:
                   # Puerto por defecto de KrakenD.
                   number: 8080
-          # Health check tambien pasa por KrakenD, que lo proxea a users-nodejs.
+          # Health check tambien pasa por KrakenD, que lo proxea a user-service.
           - path: /health
             pathType: Prefix
             backend:
@@ -52,7 +52,7 @@ spec:
             backend:
               service:
                 # nginx sirviendo el build estatico de Vite.
-                name: frontend-react
+                name: frontend-service
                 port:
                   # Puerto de nginx dentro del contenedor.
                   number: 80

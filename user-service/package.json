@@ -1,5 +1,5 @@
 {
-  "name": "users-nodejs",
+  "name": "user-service",
   "version": "1.0.0",
   "description": "Microservicio REST de usuarios con Express",
   "main": "src/app.js",

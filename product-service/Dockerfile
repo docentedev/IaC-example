@@ -10,7 +10,7 @@ RUN ./gradlew clean bootJar --no-daemon
 FROM eclipse-temurin:25-jre-alpine AS runner
 WORKDIR /app
 
-COPY --from=builder /workspace/build/libs/products-java-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=builder /workspace/build/libs/product-service-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 4020
 ENTRYPOINT ["java", "-jar", "app.jar"]

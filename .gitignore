@@ -1,14 +1,14 @@
 # ─── Java / Gradle ───────────────────────────────────────────────────────────
-products-java/build/
-products-java/target/
-products-java/.gradle/
-products-java/out/
+product-service/build/
+product-service/target/
+product-service/.gradle/
+product-service/out/
 *.class
 *.jar
 *.war
 
 # ─── Node.js ─────────────────────────────────────────────────────────────────
-users-nodejs/node_modules/
+user-service/node_modules/
 
 # ─── OS ──────────────────────────────────────────────────────────────────────
 .DS_Store

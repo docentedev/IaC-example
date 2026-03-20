@@ -2,9 +2,99 @@
 
 > Guía sin explicaciones. Leer `README.md` primero si es tu primera vez.
 
+> Nota pedagógica: para este curso se mantienen separadas las configuraciones de KrakenD
+> (`krakend-config.yaml`, `krakend-config-v2.yaml`, `krakend-config-v3-circuit-breaker.yaml`)
+> para trabajar por etapas incrementales sin romper ejercicios previos.
+
 ---
 
-## 0) Pre-flight check
+## 0) Docker (sin Compose)
+
+### Build de imágenes
+```bash
+docker build -t product-service:1.0 ./product-service
+docker build -t user-service:1.0 ./user-service
+```
+
+### Levantar contenedores
+```bash
+docker run -d --name product-service -p 4020:4020 product-service:1.0
+
+docker run -d --name user-service -p 4021:4021 \
+  -v $(pwd)/user-service/data/data.json:/app/data/data.json \
+  user-service:1.0
+```
+
+Windows (Git Bash):
+```bash
+MSYS_NO_PATHCONV=1 docker run -d --name user-service -p 4021:4021 \
+  -v $(pwd)/user-service/data/data.json:/app/data/data.json \
+  user-service:1.0
+```
+
+### Probar
+```bash
+curl http://localhost:4020/api/products
+curl http://localhost:4021/api/users
+```
+
+### Bajar
+```bash
+docker rm -f product-service user-service
+```
+
+---
+
+## 1) Docker Compose
+
+### Levantar
+```bash
+docker compose up --build -d
+```
+
+### Probar
+```bash
+curl http://localhost:4020/api/products
+curl http://localhost:4021/api/users
+```
+
+Frontend (compose):
+```bash
+open http://localhost:8081
+```
+
+### Bajar
+```bash
+docker compose down
+```
+
+### Limpieza Compose
+
+Parcial (solo bajar contenedores y red del compose actual):
+```bash
+docker compose down --remove-orphans
+```
+
+Total del proyecto compose (borra contenedores, red, volúmenes e imágenes locales construidas por compose):
+```bash
+docker compose down --volumes --remove-orphans --rmi local
+```
+
+Reset global Docker (agresivo: afecta todos tus proyectos):
+```bash
+docker system prune -af --volumes
+```
+
+Verificación después de limpiar compose:
+```bash
+docker compose ps
+docker volume ls | grep microservicios || true
+docker images | grep microservicios || true
+```
+
+---
+
+## 2) Pre-flight Kubernetes
 
 ### Verificar que el cluster está corriendo
 ```bash
@@ -29,7 +119,7 @@ Debe aparecer `traefik`.
 
 ---
 
-## 0.1) Agregar micro.local al archivo hosts
+## 2.1) Agregar micro.local al archivo hosts
 
 **macOS / Linux:**
 ```bash
@@ -43,20 +133,20 @@ Add-Content -Path "C:\Windows\System32\drivers\etc\hosts" -Value "127.0.0.1 micr
 
 ---
 
-## Fase 4 — Kubernetes (solo microservicios)
+## 3) Kubernetes base (solo microservicios)
 
 ### Build de imágenes
 ```bash
-docker build -t products-java:1.0 ./products-java
-docker build -t users-nodejs:1.0 ./users-nodejs
+docker build -t product-service:1.0 ./product-service
+docker build -t user-service:1.0 ./user-service
 ```
 
 ### Despliegue
 ```bash
 kubectl apply -f k8s/namespace.yaml
-kubectl apply -f users-nodejs/k8s/pvc.yaml
-kubectl apply -f products-java/k8s/deployment.yaml
-kubectl apply -f users-nodejs/k8s/deployment.yaml
+kubectl apply -f user-service/k8s/pvc.yaml
+kubectl apply -f product-service/k8s/deployment.yaml
+kubectl apply -f user-service/k8s/deployment.yaml
 kubectl apply -f k8s/ingress-traefik.yaml
 ```
 
@@ -76,11 +166,11 @@ curl http://micro.local/health
 
 ---
 
-## Fase 5 — API Gateway (KrakenD) + Frontend React
+## 4) API Gateway (KrakenD) + Frontend React
 
 ### Build de imágenes
 ```bash
-docker build -t frontend-react:1.0 ./frontend-react
+docker build -t frontend-service:1.0 ./frontend-service
 ```
 > KrakenD usa imagen oficial, no necesita build local.
 
@@ -88,7 +178,7 @@ docker build -t frontend-react:1.0 ./frontend-react
 ```bash
 kubectl apply -f krakend/k8s/krakend-config.yaml
 kubectl apply -f krakend/k8s/deployment.yaml
-kubectl apply -f frontend-react/k8s/deployment.yaml
+kubectl apply -f frontend-service/k8s/deployment.yaml
 kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
 ```
 
@@ -96,7 +186,7 @@ kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
 ```bash
 kubectl get pods -n microservicios
 ```
-Deben aparecer 4 pods en `Running`: `frontend-react`, `krakend`, `products-java`, `users-nodejs`.
+Deben aparecer 4 pods en `Running`: `frontend-service`, `krakend`, `product-service`, `user-service`.
 
 ### Probar
 ```bash
@@ -109,12 +199,12 @@ curl http://micro.local/health
 http://micro.local
 ```
 
-Nota: en Fase 5 ya verás los formularios de login y registro en el frontend,
-pero el backend de auth aún no está desplegado — se activa en Fase 6.
+Nota: en la sección 4 ya verás los formularios de login y registro en el frontend,
+pero el backend de auth aún no está desplegado; se activa en la sección 5.
 
 ---
 
-## Fase 6 — Auth Service (JWT + PostgreSQL)
+## 5) Auth Service (JWT + PostgreSQL)
 
 ### Build de imagen
 ```bash
@@ -149,8 +239,12 @@ curl -X POST http://micro.local/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"username":"ana","password":"123456"}'
 
-# Health check
-curl http://micro.local/auth/health
+# Perfil autenticado vía gateway
+TOKEN=$(curl -s -X POST http://micro.local/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"ana","password":"123456"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+
+curl -H "Authorization: Bearer $TOKEN" http://micro.local/auth/me
 ```
 ```
 # Abrir en el navegador (formularios integrados en el frontend):
@@ -159,10 +253,10 @@ http://micro.local
 
 ---
 
-## Fase 7 — Cart Service (FastAPI/Python + comunicación inter-microservicio)
+## 6) Cart Service (FastAPI/Python + comunicación inter-microservicio)
 
 > El cart-service demuestra comunicación inter-microservicio: cuando pedís `GET /api/cart`,
-> el cart-service llama internamente a `products-java:4020` para enriquecer cada ítem con
+> el cart-service llama internamente a `product-service:4020` para enriquecer cada ítem con
 > nombre y precio real. Todo dentro del cluster de Kubernetes, sin pasar por el API Gateway.
 
 ### Build de imagen
@@ -222,9 +316,33 @@ http://micro.local
 
 ---
 
+## 6.1) Opcional — KrakenD con Circuit Breaker (incremental)
+
+> Esta etapa es opcional y no reemplaza las fases anteriores.
+> Se recomienda aplicarla después de la sección 6 para no alterar ejercicios previos.
+
+### Aplicar configuración v3 (con Circuit Breaker)
+```bash
+kubectl apply -f krakend/k8s/krakend-config-v3-circuit-breaker.yaml
+kubectl rollout restart deployment krakend -n microservicios
+```
+
+### Verificar cambios de estado del Circuit Breaker
+```bash
+kubectl logs -f deployment/krakend -n microservicios | grep cb-
+```
+
+### Volver a la configuración anterior (sin Circuit Breaker)
+```bash
+kubectl apply -f krakend/k8s/krakend-config-v2.yaml
+kubectl rollout restart deployment krakend -n microservicios
+```
+
+---
+
 ## Rollback
 
-### Fase 7 → Fase 6 (remover cart-service)
+### 6 → 5 (remover cart-service)
 ```bash
 kubectl apply -f krakend/k8s/krakend-config.yaml
 kubectl rollout restart deployment krakend -n microservicios
@@ -233,7 +351,7 @@ kubectl delete -f cart-service/k8s/postgres.yaml   --ignore-not-found
 kubectl delete -f cart-service/k8s/secrets.yaml    --ignore-not-found
 ```
 
-### Fase 6 → Fase 5 (remover auth-service)
+### 5 → 4 (remover auth-service)
 ```bash
 kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
 kubectl delete -f auth-service/k8s/deployment.yaml --ignore-not-found
@@ -241,10 +359,10 @@ kubectl delete -f auth-service/k8s/postgres.yaml   --ignore-not-found
 kubectl delete -f auth-service/k8s/secrets.yaml    --ignore-not-found
 ```
 
-### Fase 5 → Fase 4 (remover API Gateway + Frontend)
+### 4 → 3 (remover API Gateway + Frontend)
 ```bash
 kubectl apply -f k8s/ingress-traefik.yaml
-kubectl delete -f frontend-react/k8s/deployment.yaml  --ignore-not-found
+kubectl delete -f frontend-service/k8s/deployment.yaml  --ignore-not-found
 kubectl delete -f krakend/k8s/deployment.yaml         --ignore-not-found
 kubectl delete -f krakend/k8s/krakend-config.yaml     --ignore-not-found
 ```
@@ -252,6 +370,8 @@ kubectl delete -f krakend/k8s/krakend-config.yaml     --ignore-not-found
 ---
 
 ## Limpieza total (desde cero)
+
+### Limpieza Kubernetes (desde cero)
 
 Atajo recomendado (script que limpia todo):
 ```bash
@@ -269,15 +389,15 @@ kubectl delete -f cart-service/k8s/secrets.yaml    --ignore-not-found
 kubectl delete -f auth-service/k8s/deployment.yaml --ignore-not-found
 kubectl delete -f auth-service/k8s/postgres.yaml   --ignore-not-found
 kubectl delete -f auth-service/k8s/secrets.yaml    --ignore-not-found
-kubectl delete -f frontend-react/k8s/deployment.yaml   --ignore-not-found
+kubectl delete -f frontend-service/k8s/deployment.yaml   --ignore-not-found
 kubectl delete -f krakend/k8s/deployment.yaml          --ignore-not-found
 kubectl delete -f krakend/k8s/krakend-config-v2.yaml   --ignore-not-found
 kubectl delete -f krakend/k8s/krakend-config.yaml      --ignore-not-found
-kubectl delete -f users-nodejs/k8s/deployment.yaml  --ignore-not-found
-kubectl delete -f products-java/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f users-nodejs/k8s/pvc.yaml         --ignore-not-found
+kubectl delete -f user-service/k8s/deployment.yaml  --ignore-not-found
+kubectl delete -f product-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f user-service/k8s/pvc.yaml         --ignore-not-found
 kubectl delete -f k8s/namespace.yaml --ignore-not-found
-docker rmi -f products-java:1.0 users-nodejs:1.0 frontend-react:1.0 auth-service:1.0 cart-service:1.0 2>/dev/null || true
+docker rmi -f product-service:1.0 user-service:1.0 frontend-service:1.0 auth-service:1.0 cart-service:1.0 2>/dev/null || true
 ```
 
 **Eliminar micro.local del archivo hosts:**
@@ -299,7 +419,7 @@ Windows (PowerShell como Administrador):
 ## Scripts disponibles
 
 ```bash
-bash scripts/deploy-all.sh   # Despliega todo (fases 4 → 5 → 6 → 7)
+bash scripts/deploy-all.sh   # Despliega todo (k8s: 3 → 4 → 5 → 6)
 bash scripts/teardown.sh     # Limpia todo (Kubernetes + imágenes Docker)
 ```
 
@@ -311,9 +431,9 @@ bash scripts/teardown.sh     # Limpia todo (Kubernetes + imágenes Docker)
 kubectl get all -n microservicios
 kubectl get pods -n microservicios
 kubectl logs -f deployment/krakend        -n microservicios
-kubectl logs -f deployment/frontend-react -n microservicios
-kubectl logs -f deployment/products-java  -n microservicios
-kubectl logs -f deployment/users-nodejs   -n microservicios
+kubectl logs -f deployment/frontend-service -n microservicios
+kubectl logs -f deployment/product-service  -n microservicios
+kubectl logs -f deployment/user-service   -n microservicios
 kubectl logs -f deployment/auth-service   -n microservicios
 kubectl logs -f deployment/auth-postgres  -n microservicios
 kubectl logs -f deployment/cart-service   -n microservicios

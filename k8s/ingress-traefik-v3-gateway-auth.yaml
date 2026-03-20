@@ -32,18 +32,18 @@ spec:
                 name: krakend
                 port:
                   number: 8080
-          # Auth service: login, register y JWT bajo /auth
+          # Auth tambien pasa por KrakenD para centralizar en API Gateway.
           - path: /auth
             pathType: Prefix
             backend:
               service:
-                name: auth-service
+                name: krakend
                 port:
-                  number: 3002
+                  number: 8080
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: frontend-react
+                name: frontend-service
                 port:
                   number: 80

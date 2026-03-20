@@ -24,7 +24,7 @@ data:
             {
               "url_pattern": "/api/products",
               "encoding": "no-op",
-              "host": ["http://products-java:4020"],
+              "host": ["http://product-service:4020"],
               "method": "GET"
             }
           ]
@@ -37,7 +37,7 @@ data:
             {
               "url_pattern": "/api/products/{id}",
               "encoding": "json",
-              "host": ["http://products-java:4020"],
+              "host": ["http://product-service:4020"],
               "method": "GET"
             }
           ]
@@ -50,7 +50,7 @@ data:
             {
               "url_pattern": "/api/users",
               "encoding": "no-op",
-              "host": ["http://users-nodejs:4021"],
+              "host": ["http://user-service:4021"],
               "method": "GET"
             }
           ]
@@ -63,7 +63,7 @@ data:
             {
               "url_pattern": "/api/users/{id}",
               "encoding": "json",
-              "host": ["http://users-nodejs:4021"],
+              "host": ["http://user-service:4021"],
               "method": "GET"
             }
           ]
@@ -76,8 +76,50 @@ data:
             {
               "url_pattern": "/api/users",
               "encoding": "json",
-              "host": ["http://users-nodejs:4021"],
+              "host": ["http://user-service:4021"],
               "method": "POST"
+            }
+          ]
+        },
+        {
+          "endpoint": "/auth/register",
+          "method": "POST",
+          "output_encoding": "json",
+          "input_headers": ["Content-Type"],
+          "backend": [
+            {
+              "url_pattern": "/auth/register",
+              "encoding": "json",
+              "host": ["http://auth-service:3002"],
+              "method": "POST"
+            }
+          ]
+        },
+        {
+          "endpoint": "/auth/login",
+          "method": "POST",
+          "output_encoding": "json",
+          "input_headers": ["Content-Type"],
+          "backend": [
+            {
+              "url_pattern": "/auth/login",
+              "encoding": "json",
+              "host": ["http://auth-service:3002"],
+              "method": "POST"
+            }
+          ]
+        },
+        {
+          "endpoint": "/auth/me",
+          "method": "GET",
+          "output_encoding": "json",
+          "input_headers": ["Authorization"],
+          "backend": [
+            {
+              "url_pattern": "/auth/me",
+              "encoding": "json",
+              "host": ["http://auth-service:3002"],
+              "method": "GET"
             }
           ]
         },
@@ -89,7 +131,7 @@ data:
             {
               "url_pattern": "/health",
               "encoding": "json",
-              "host": ["http://users-nodejs:4021"],
+              "host": ["http://user-service:4021"],
               "method": "GET"
             }
           ]

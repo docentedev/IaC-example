@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Cart Service",
-    description="Microservicio de carrito de compras — consume products-java internamente",
+    description="Microservicio de carrito de compras — consume product-service internamente",
     version="1.0.0",
     lifespan=lifespan,
 )

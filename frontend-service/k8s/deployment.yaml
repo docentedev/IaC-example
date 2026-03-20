@@ -4,41 +4,41 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend-react
+  name: frontend-service
   namespace: microservicios
   labels:
-    app: frontend-react
+    app: frontend-service
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: frontend-react
+      app: frontend-service
   template:
     metadata:
       labels:
-        app: frontend-react
+        app: frontend-service
     spec:
       containers:
-        - name: frontend-react
+        - name: frontend-service
           # Imagen construida localmente con el Dockerfile multi-stage.
-          image: frontend-react:1.0
+          image: frontend-service:1.0
           imagePullPolicy: IfNotPresent
           ports:
             # nginx escucha en el puerto 80 dentro del contenedor.
             - containerPort: 80
 ---
-# Service para exponer el pod de frontend-react dentro del cluster.
+# Service para exponer el pod de frontend-service dentro del cluster.
 # Traefik lo alcanzara a traves de este Service.
 apiVersion: v1
 kind: Service
 metadata:
-  name: frontend-react
+  name: frontend-service
   namespace: microservicios
   labels:
-    app: frontend-react
+    app: frontend-service
 spec:
   selector:
-    app: frontend-react
+    app: frontend-service
   ports:
     - protocol: TCP
       # Puerto del Service dentro del cluster.

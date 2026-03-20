@@ -28,7 +28,7 @@ spec:
             backend:
               service:
                 # Service destino para products.
-                name: products-java
+                name: product-service
                 port:
                   # Puerto del Service de products.
                   number: 4020
@@ -39,7 +39,7 @@ spec:
             backend:
               service:
                 # Service destino para users.
-                name: users-nodejs
+                name: user-service
                 port:
                   # Puerto del Service de users.
                   number: 4021
@@ -49,6 +49,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: users-nodejs
+                name: user-service
                 port:
                   number: 4021

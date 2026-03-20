@@ -49,16 +49,16 @@ fi
 
 # ── Fase 4: Namespace + Microservicios ──────────────────────────────────
 echo ">>> FASE 4: Build de imágenes de microservicios..."
-docker build -t products-java:1.0 ./products-java
-docker build -t users-nodejs:1.0  ./users-nodejs
+docker build -t product-service:1.0 ./product-service
+docker build -t user-service:1.0  ./user-service
 echo "  ✅ Imágenes de microservicios construidas"
 echo ""
 
 echo ">>> FASE 4: Desplegando namespace y microservicios..."
 kubectl apply -f k8s/namespace.yaml
-kubectl apply -f users-nodejs/k8s/pvc.yaml
-kubectl apply -f products-java/k8s/deployment.yaml
-kubectl apply -f users-nodejs/k8s/deployment.yaml
+kubectl apply -f user-service/k8s/pvc.yaml
+kubectl apply -f product-service/k8s/deployment.yaml
+kubectl apply -f user-service/k8s/deployment.yaml
 kubectl apply -f k8s/ingress-traefik.yaml
 wait_pods
 echo "  ✅ Fase 4 completa — http://micro.local/api/products"
@@ -66,14 +66,14 @@ echo ""
 
 # ── Fase 5: API Gateway + Frontend ──────────────────────────────────────
 echo ">>> FASE 5: Build de imagen frontend..."
-docker build -t frontend-react:1.0 ./frontend-react
+docker build -t frontend-service:1.0 ./frontend-service
 echo "  ✅ Imagen frontend construida"
 echo ""
 
 echo ">>> FASE 5: Desplegando KrakenD y frontend..."
 kubectl apply -f krakend/k8s/krakend-config.yaml
 kubectl apply -f krakend/k8s/deployment.yaml
-kubectl apply -f frontend-react/k8s/deployment.yaml
+kubectl apply -f frontend-service/k8s/deployment.yaml
 kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
 wait_pods
 echo "  ✅ Fase 5 completa — http://micro.local"
@@ -91,7 +91,7 @@ kubectl apply -f auth-service/k8s/postgres.yaml
 kubectl apply -f auth-service/k8s/deployment.yaml
 kubectl apply -f k8s/ingress-traefik-v3-gateway-auth.yaml
 wait_pods
-echo "  ✅ Fase 6 completa — http://micro.local/auth/health"
+echo "  ✅ Fase 6 completa — endpoints auth disponibles en /auth/register, /auth/login y /auth/me"
 echo ""
 
 # ── Fase 7: Cart Service ─────────────────────────────────────────────────
@@ -121,9 +121,9 @@ echo "  Frontend:   http://micro.local"
 echo "  Products:   http://micro.local/api/products"
 echo "  Users:      http://micro.local/api/users"
 echo "  KrakenD:    http://micro.local/health"
-echo "  Auth:       http://micro.local/auth/health"
 echo "  Register:   POST http://micro.local/auth/register"
 echo "  Login:      POST http://micro.local/auth/login"
+echo "  Perfil:     GET  http://micro.local/auth/me      (JWT requerido)"
 echo "  Cart:       GET  http://micro.local/api/cart         (JWT requerido)"
 echo "  Cart:       POST http://micro.local/api/cart/items   (JWT requerido)"
 echo ""

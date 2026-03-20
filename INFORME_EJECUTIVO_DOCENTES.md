@@ -11,11 +11,11 @@ Entregar una base práctica y reutilizable para cursos de:
 - Testing y cobertura de código en Java
 
 ## Qué contiene el proyecto
-- `products-java`: Spring Boot (Java 25), API de productos.
-- `users-nodejs`: Express (Node.js), API de usuarios.
+- `product-service`: Spring Boot (Java 25), API de productos.
+- `user-service`: Express (Node.js), API de usuarios.
 - `auth-service`: autenticación con JWT y PostgreSQL.
 - `cart-service`: FastAPI (Python), carrito con PostgreSQL y llamada interna a products.
-- `frontend-react`: cliente web para flujo end-to-end.
+- `frontend-service`: cliente web para flujo end-to-end.
 - `krakend`: API Gateway para enrutamiento centralizado de APIs.
 - `traefik` por Ingress en Kubernetes para exposición HTTP local con `micro.local`.
 
@@ -33,15 +33,17 @@ Entregar una base práctica y reutilizable para cursos de:
 - Contenerización y ciclo de vida de imágenes.
 - Orquestación en Kubernetes con recursos reales de trabajo.
 - Seguridad básica moderna con JWT.
+- Resiliencia de gateway con Circuit Breaker en KrakenD (opcional e incremental).
 - Persistencia y conceptos de almacenamiento en contenedores.
 - Testing backend en Java con JUnit + Mockito + MockMvc + JaCoCo.
 
 ## Estado actual (estable)
 - Release/tag disponible: `v2.0.1`.
-- Pruebas automáticas en `products-java` agregadas y ejecutables con Java 25.
+- Pruebas automáticas en `product-service` agregadas y ejecutables con Java 25.
 - Cobertura de código con JaCoCo 0.8.14.
 - Documentación de testing consolidada en `TESTING.md`.
 - Scripts para despliegue y limpieza integral del laboratorio.
+- Configuración incremental disponible para KrakenD con Circuit Breaker (v3 opcional).
 
 ## Valor para otros docentes
 - Material listo para usar en clases prácticas y ayudantías.

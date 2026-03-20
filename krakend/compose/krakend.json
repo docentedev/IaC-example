@@ -1,0 +1,213 @@
+{
+  "$schema": "https://www.krakend.io/schema/v3.json",
+  "version": 3,
+  "name": "API Gateway - Microservicios DuocUC (Compose)",
+  "timeout": "3000ms",
+  "cache_ttl": "300s",
+  "output_encoding": "json",
+  "endpoints": [
+    {
+      "endpoint": "/api/products",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [
+        {
+          "url_pattern": "/api/products",
+          "encoding": "no-op",
+          "host": ["http://product-service:4020"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/products/{id}",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        {
+          "url_pattern": "/api/products/{id}",
+          "encoding": "json",
+          "host": ["http://product-service:4020"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/users",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "backend": [
+        {
+          "url_pattern": "/api/users",
+          "encoding": "no-op",
+          "host": ["http://user-service:4021"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/users/{id}",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        {
+          "url_pattern": "/api/users/{id}",
+          "encoding": "json",
+          "host": ["http://user-service:4021"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/users",
+      "method": "POST",
+      "output_encoding": "json",
+      "backend": [
+        {
+          "url_pattern": "/api/users",
+          "encoding": "json",
+          "host": ["http://user-service:4021"],
+          "method": "POST"
+        }
+      ]
+    },
+    {
+      "endpoint": "/auth/register",
+      "method": "POST",
+      "output_encoding": "json",
+      "input_headers": ["Content-Type"],
+      "backend": [
+        {
+          "url_pattern": "/auth/register",
+          "encoding": "json",
+          "host": ["http://auth-service:3002"],
+          "method": "POST"
+        }
+      ]
+    },
+    {
+      "endpoint": "/auth/login",
+      "method": "POST",
+      "output_encoding": "json",
+      "input_headers": ["Content-Type"],
+      "backend": [
+        {
+          "url_pattern": "/auth/login",
+          "encoding": "json",
+          "host": ["http://auth-service:3002"],
+          "method": "POST"
+        }
+      ]
+    },
+    {
+      "endpoint": "/auth/me",
+      "method": "GET",
+      "output_encoding": "json",
+      "input_headers": ["Authorization"],
+      "backend": [
+        {
+          "url_pattern": "/auth/me",
+          "encoding": "json",
+          "host": ["http://auth-service:3002"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        {
+          "url_pattern": "/health",
+          "encoding": "json",
+          "host": ["http://user-service:4021"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/cart/health",
+      "method": "GET",
+      "output_encoding": "json",
+      "backend": [
+        {
+          "url_pattern": "/cart/health",
+          "encoding": "json",
+          "host": ["http://cart-service:4022"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/cart",
+      "method": "GET",
+      "output_encoding": "no-op",
+      "input_headers": ["Authorization"],
+      "backend": [
+        {
+          "url_pattern": "/cart",
+          "encoding": "no-op",
+          "host": ["http://cart-service:4022"],
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/cart/items",
+      "method": "POST",
+      "output_encoding": "no-op",
+      "input_headers": ["Authorization", "Content-Type"],
+      "backend": [
+        {
+          "url_pattern": "/cart/items",
+          "encoding": "no-op",
+          "host": ["http://cart-service:4022"],
+          "method": "POST"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/cart/items/{product_id}",
+      "method": "PATCH",
+      "output_encoding": "no-op",
+      "input_headers": ["Authorization", "Content-Type"],
+      "backend": [
+        {
+          "url_pattern": "/cart/items/{product_id}",
+          "encoding": "no-op",
+          "host": ["http://cart-service:4022"],
+          "method": "PATCH"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/cart/items/{product_id}",
+      "method": "DELETE",
+      "output_encoding": "no-op",
+      "input_headers": ["Authorization"],
+      "backend": [
+        {
+          "url_pattern": "/cart/items/{product_id}",
+          "encoding": "no-op",
+          "host": ["http://cart-service:4022"],
+          "method": "DELETE"
+        }
+      ]
+    },
+    {
+      "endpoint": "/api/cart",
+      "method": "DELETE",
+      "output_encoding": "no-op",
+      "input_headers": ["Authorization"],
+      "backend": [
+        {
+          "url_pattern": "/cart",
+          "encoding": "no-op",
+          "host": ["http://cart-service:4022"],
+          "method": "DELETE"
+        }
+      ]
+    }
+  ]
+}

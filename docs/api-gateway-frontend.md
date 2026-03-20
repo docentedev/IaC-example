@@ -2,7 +2,7 @@
 
 Esta fase amplía la arquitectura del laboratorio con dos piezas nuevas:
 - **KrakenD** como API Gateway centralizado
-- **frontend-react** como cliente web estático servido por nginx
+- **frontend-service** como cliente web estático servido por nginx
 
 ---
 
@@ -29,7 +29,7 @@ Browser (http://micro.local)
 Sirve archivos          ┌─────┴──────┐
 estáticos de React      │            │
 (dist/ de Vite)         ▼            ▼
-                 products-java   users-nodejs
+                 product-service   user-service
                   Spring Boot    Express.js
                    :4020           :4021
 ```
@@ -40,7 +40,7 @@ estáticos de React      │            │
 |--------------|-----------------|----------------------------------------|
 | `/api/**`    | krakend:8080    | Todo el tráfico de API pasa por aquí   |
 | `/health`    | krakend:8080    | Health check (KrakenD lo proxea)       |
-| `/`          | frontend-react:80 | App React (nginx estático)           |
+| `/`          | frontend-service:80 | App React (nginx estático)           |
 
 ---
 
@@ -93,7 +93,7 @@ Stage 1: node:20-alpine         Stage 2: nginx:alpine
 Esto significa que `node_modules` (~200MB) **nunca entra a la imagen final**.
 
 ```
-frontend-react/
+frontend-service/
 ├── Dockerfile           ← multi-stage build
 ├── nginx.conf           ← fallback a index.html para React Router
 ├── package.json
@@ -113,8 +113,8 @@ frontend-react/
 ### 1. Construir la imagen del frontend
 
 ```bash
-cd frontend-react
-docker build -t frontend-react:1.0 .
+cd frontend-service
+docker build -t frontend-service:1.0 .
 ```
 
 ### 2. Aplicar los manifiestos de KrakenD
@@ -127,7 +127,7 @@ kubectl apply -f krakend/k8s/deployment.yaml
 ### 3. Aplicar el manifesto del frontend
 
 ```bash
-kubectl apply -f frontend-react/k8s/deployment.yaml
+kubectl apply -f frontend-service/k8s/deployment.yaml
 ```
 
 ### 4. Actualizar el Ingress (ya modificado en k8s/ingress-traefik.yaml)
@@ -146,10 +146,10 @@ Deberías ver:
 
 ```
 NAME                              READY   STATUS    RESTARTS
-frontend-react-xxxxx              1/1     Running   0
+frontend-service-xxxxx              1/1     Running   0
 krakend-xxxxx                     1/1     Running   0
-products-java-xxxxx               1/1     Running   0
-users-nodejs-xxxxx                1/1     Running   0
+product-service-xxxxx               1/1     Running   0
+user-service-xxxxx                1/1     Running   0
 ```
 
 ### 6. Abrir el navegador
@@ -174,7 +174,7 @@ docker run -p 8080:8080 \
   devopsfaith/krakend:2.7 run -c /etc/krakend/krakend.json
 
 # En otra terminal, levantar el frontend
-cd frontend-react
+cd frontend-service
 npm install
 npm run dev
 # → http://localhost:3000
@@ -190,5 +190,5 @@ a `http://localhost:8080` (KrakenD local) durante el desarrollo.
 Agregar al script `scripts/build-images.sh` la línea del frontend:
 
 ```bash
-docker build -t frontend-react:1.0 ./frontend-react
+docker build -t frontend-service:1.0 ./frontend-service
 ```

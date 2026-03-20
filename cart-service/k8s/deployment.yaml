@@ -49,7 +49,7 @@ spec:
                   name: auth-secrets
                   key: JWT_SECRET
             - name: PRODUCTS_SERVICE_URL
-              value: "http://products-java:4020"
+              value: "http://product-service:4020"
 ---
 # ── Service ClusterIP ─────────────────────────────────────────────────────────
 apiVersion: v1
