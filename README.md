@@ -13,7 +13,7 @@ Ilustra cómo pasar de desarrollo local → containerización → orquestación 
 - Arquitectura diseñada para mostrar cómo dos microservicios independientes se comunican y se orquestan
 
 **Fases del laboratorio:**
-Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes → 5️⃣ API Gateway + Frontend
+Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes → 5️⃣ API Gateway + Frontend → 6️⃣ Auth Platform
 
 ## 📋 Indice de contenidos
 
@@ -22,7 +22,8 @@ Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker
 2. [Docker Dockerfiles](#2-ejecutar-usando-dockerfiles-sin-compose)
 3. [Docker Compose](#3-ejecutar-con-docker-compose)
 4. [Kubernetes](#4-base-para-kubernetes-siguiente-paso)
-5. [API Gateway + Frontend React](#5-api-gateway--frontend-react-e2e-completo) ← **Fase final del laboratorio**
+5. [API Gateway + Frontend React](#5-api-gateway--frontend-react-e2e-completo)
+6. [Auth Service (JWT + PostgreSQL)](#6-auth-service-jwt--postgresql) ← **Fase final del laboratorio**
 
 ---
 
@@ -2276,6 +2277,18 @@ a `http://localhost:8080`. Si no tenés KrakenD local corriendo, podés ajustarl
 tranquilamente para que apunte directo a `http://localhost:4020` y `http://localhost:4021`
 durante el desarrollo.
 
+### 5.9 Frontend preparado para autenticacion
+
+Desde esta fase el frontend ya incluye los formularios de **Iniciar sesión** y
+**Crear cuenta** integrados directamente en la página principal.
+
+Importante:
+- Los formularios llaman a `POST /auth/login` y `POST /auth/register` del auth-service.
+- Si el auth-service aún no está desplegado (Fase 5), los formularios se muestran pero
+  las peticiones darán error 503 — esto es esperado.
+- Al completar Fase 6, el login y registro funcionan completamente.
+- El JWT resultante se guarda en `localStorage` del navegador.
+
 ---
 
 ### 5.7 🔄 Actualizar la configuración de KrakenD
@@ -2336,6 +2349,109 @@ Limpiar imágenes locales:
 
 ```bash
 docker rmi -f frontend-react:1.0 products-java:1.0 users-nodejs:1.0 2>/dev/null || true
+```
+
+---
+
+## 6) Auth Service: JWT + PostgreSQL
+
+**Objetivo:** agregar un microservicio propio de autenticacion con JWT y persistencia en PostgreSQL.
+
+En esta fase se integra:
+- **auth-service** (Node.js/Express): endpoints `POST /auth/register` y `POST /auth/login`
+- **PostgreSQL** (persistencia de usuarios con password encriptado con bcrypt)
+- **JWT** (JSON Web Token) para sesiones sin estado
+
+### Archivos nuevos
+
+- `auth-service/k8s/secrets.yaml` — credenciales de PostgreSQL y JWT secret
+- `auth-service/k8s/postgres.yaml` — PostgreSQL Deployment + PVC + Service
+- `auth-service/k8s/deployment.yaml` — auth-service Deployment + Service
+- `k8s/ingress-traefik-v3-gateway-auth.yaml` — Ingress actualizado con ruta `/auth`
+
+### Tabla de usuarios
+
+| Campo | Tipo | Restriccion |
+|---|---|---|
+| `name` | VARCHAR | requerido |
+| `last_name` | VARCHAR | requerido |
+| `email` | VARCHAR | requerido, **único** |
+| `username` | VARCHAR | requerido, **único** |
+| `password_hash` | VARCHAR | bcrypt 10 rounds |
+| `phone` | VARCHAR | opcional |
+| `address` | TEXT | opcional |
+
+### Build
+
+```bash
+docker build -t auth-service:1.0 ./auth-service
+```
+
+### Despliegue
+
+```bash
+kubectl apply -f auth-service/k8s/secrets.yaml
+kubectl apply -f auth-service/k8s/postgres.yaml
+kubectl apply -f auth-service/k8s/deployment.yaml
+kubectl apply -f k8s/ingress-traefik-v3-gateway-auth.yaml
+```
+
+### Verificar
+
+```bash
+kubectl get pods -n microservicios
+```
+
+Deberias ver en `Running`:
+- `auth-postgres-xxxxx`
+- `auth-service-xxxxx`
+
+### Endpoints disponibles
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/auth/register` | Registra usuario, devuelve JWT |
+| `POST` | `/auth/login` | Valida credenciales, devuelve JWT |
+| `GET` | `/auth/me` | Devuelve datos del usuario (requiere `Authorization: Bearer <token>`) |
+| `GET` | `/auth/health` | Health check |
+
+### Prueba con curl
+
+```bash
+# Registrar usuario
+curl -X POST http://micro.local/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ana","lastName":"Gomez","email":"ana@duoc.cl","username":"ana","password":"123456"}'
+
+# Login
+curl -X POST http://micro.local/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"ana","password":"123456"}'
+
+# Ver perfil (reemplaza <TOKEN> con el JWT recibido)
+curl http://micro.local/auth/me \
+  -H 'Authorization: Bearer <TOKEN>'
+```
+
+### Rollback Fase 6 → Fase 5
+
+```bash
+kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
+kubectl delete -f auth-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f auth-service/k8s/postgres.yaml   --ignore-not-found
+kubectl delete -f auth-service/k8s/secrets.yaml    --ignore-not-found
+```
+
+### Script de despliegue completo (todas las fases en un comando)
+
+```bash
+bash scripts/deploy-all.sh
+```
+
+### Script de limpieza completa
+
+```bash
+bash scripts/teardown.sh
 ```
 
 ---

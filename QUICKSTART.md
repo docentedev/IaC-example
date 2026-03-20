@@ -109,42 +109,99 @@ curl http://micro.local/health
 http://micro.local
 ```
 
+Nota: en Fase 5 ya verás los formularios de login y registro en el frontend,
+pero el backend de auth aún no está desplegado — se activa en Fase 6.
+
 ---
 
-## Actualizar config de KrakenD (después de editar krakend-config.yaml)
+## Fase 6 — Auth Service (JWT + PostgreSQL)
 
+### Build de imagen
 ```bash
-kubectl apply -f krakend/k8s/krakend-config.yaml
-kubectl rollout restart deployment/krakend -n microservicios
-kubectl rollout status deployment/krakend -n microservicios
+docker build -t auth-service:1.0 ./auth-service
+```
+
+### Despliegue
+```bash
+kubectl apply -f auth-service/k8s/secrets.yaml
+kubectl apply -f auth-service/k8s/postgres.yaml
+kubectl apply -f auth-service/k8s/deployment.yaml
+kubectl apply -f k8s/ingress-traefik-v3-gateway-auth.yaml
+```
+
+### Verificar
+```bash
+kubectl get pods -n microservicios
+```
+Deben aparecer en `Running`:
+- `auth-postgres`
+- `auth-service`
+
+### Probar
+```bash
+# Registrar usuario
+curl -X POST http://micro.local/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Ana","lastName":"Gomez","email":"ana@duoc.cl","username":"ana","password":"123456"}'
+
+# Login
+curl -X POST http://micro.local/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"ana","password":"123456"}'
+
+# Health check
+curl http://micro.local/auth/health
+```
+```
+# Abrir en el navegador (formularios integrados en el frontend):
+http://micro.local
 ```
 
 ---
 
-## Rollback: volver de Fase 5 → Fase 4
+## Rollback
 
+### Fase 6 → Fase 5 (remover auth-service)
+```bash
+kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
+kubectl delete -f auth-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f auth-service/k8s/postgres.yaml   --ignore-not-found
+kubectl delete -f auth-service/k8s/secrets.yaml    --ignore-not-found
+```
+
+### Fase 5 → Fase 4 (remover API Gateway + Frontend)
 ```bash
 kubectl apply -f k8s/ingress-traefik.yaml
-kubectl delete -f frontend-react/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f krakend/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f krakend/k8s/krakend-config.yaml --ignore-not-found
+kubectl delete -f frontend-react/k8s/deployment.yaml  --ignore-not-found
+kubectl delete -f krakend/k8s/deployment.yaml         --ignore-not-found
+kubectl delete -f krakend/k8s/krakend-config.yaml     --ignore-not-found
 ```
 
 ---
 
 ## Limpieza total (desde cero)
 
+Atajo recomendado (script que limpia todo):
 ```bash
-kubectl delete -f k8s/ingress-traefik-v2-gateway.yaml --ignore-not-found
-kubectl delete -f k8s/ingress-traefik.yaml --ignore-not-found
-kubectl delete -f frontend-react/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f krakend/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f krakend/k8s/krakend-config.yaml --ignore-not-found
-kubectl delete -f users-nodejs/k8s/deployment.yaml --ignore-not-found
+bash scripts/teardown.sh
+```
+
+O manualmente:
+```bash
+kubectl delete -f k8s/ingress-traefik-v3-gateway-auth.yaml --ignore-not-found
+kubectl delete -f k8s/ingress-traefik-v2-gateway.yaml       --ignore-not-found
+kubectl delete -f k8s/ingress-traefik.yaml                  --ignore-not-found
+kubectl delete -f auth-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f auth-service/k8s/postgres.yaml   --ignore-not-found
+kubectl delete -f auth-service/k8s/secrets.yaml    --ignore-not-found
+kubectl delete -f frontend-react/k8s/deployment.yaml   --ignore-not-found
+kubectl delete -f krakend/k8s/deployment.yaml          --ignore-not-found
+kubectl delete -f krakend/k8s/krakend-config.yaml      --ignore-not-found
+kubectl delete -f users-nodejs/k8s/deployment.yaml  --ignore-not-found
 kubectl delete -f products-java/k8s/deployment.yaml --ignore-not-found
-kubectl delete -f users-nodejs/k8s/pvc.yaml --ignore-not-found
+kubectl delete -f users-nodejs/k8s/pvc.yaml         --ignore-not-found
 kubectl delete -f k8s/namespace.yaml --ignore-not-found
-docker rmi -f products-java:1.0 users-nodejs:1.0 frontend-react:1.0 2>/dev/null || true
+docker rmi -f products-java:1.0 users-nodejs:1.0 frontend-react:1.0 auth-service:1.0 2>/dev/null || true
 ```
 
 **Eliminar micro.local del archivo hosts:**
@@ -163,15 +220,33 @@ Windows (PowerShell como Administrador):
 
 ---
 
+## Scripts disponibles
+
+```bash
+bash scripts/deploy-all.sh   # Despliega todo (fases 4 → 5 → 6)
+bash scripts/teardown.sh     # Limpia todo (Kubernetes + imágenes Docker)
+```
+
+---
+
 ## Comandos de diagnóstico útiles
 
 ```bash
 kubectl get all -n microservicios
 kubectl get pods -n microservicios
-kubectl logs -f deployment/krakend -n microservicios
+kubectl logs -f deployment/krakend        -n microservicios
 kubectl logs -f deployment/frontend-react -n microservicios
-kubectl logs -f deployment/products-java -n microservicios
-kubectl logs -f deployment/users-nodejs -n microservicios
+kubectl logs -f deployment/products-java  -n microservicios
+kubectl logs -f deployment/users-nodejs   -n microservicios
+kubectl logs -f deployment/auth-service   -n microservicios
+kubectl logs -f deployment/auth-postgres  -n microservicios
 kubectl describe pod -n microservicios <nombre-pod>
 kubectl get events -n microservicios --sort-by=.metadata.creationTimestamp
+```
+
+**Si modificaste krakend-config.yaml (después de despliegue):**
+
+```bash
+kubectl apply -f krakend/k8s/krakend-config.yaml
+kubectl rollout restart deployment/krakend -n microservicios
 ```
