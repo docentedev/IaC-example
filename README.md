@@ -1,4 +1,4 @@
-# Microservicios de ejemplo: Products + Users
+# Microservicios de ejemplo: Products + Users + Auth + Cart
 
 **Contexto académico:** Este proyecto es un laboratorio práctico para la especialidad **Fullstack 3 - Ingeniería de Software** (DUOC).
 Ilustra cómo pasar de desarrollo local → containerización → orquestación de microservicios en Kubernetes.
@@ -6,14 +6,17 @@ Ilustra cómo pasar de desarrollo local → containerización → orquestación 
 **Contenido:**
 - `products-java`: Spring Boot + Gradle, puerto `4020` (backend Java)
 - `users-nodejs`: Express.js, puerto `4021` (backend Node.js)
+- `auth-service`: Express.js + JWT + PostgreSQL, puerto `3002` (autenticación)
+- `cart-service`: FastAPI + PostgreSQL, puerto `4022` (carrito)
 
 **Características:**
-- Ambos servicios responden con datos mock (sin base de datos externa)
+- `products-java` y `users-nodejs` responden con datos mock para base del laboratorio
 - `users-nodejs` persiste usuarios en archivo JSON (`data/data.json`) — ejemplo de persistencia local
-- Arquitectura diseñada para mostrar cómo dos microservicios independientes se comunican y se orquestan
+- `auth-service` emite JWT y `cart-service` valida JWT y consume `products-java` por red interna del cluster
+- Arquitectura diseñada para mostrar cómo múltiples microservicios independientes se comunican y se orquestan
 
 **Fases del laboratorio:**
-Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes → 5️⃣ API Gateway + Frontend → 6️⃣ Auth Platform
+Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker individualizado → 3️⃣ Docker Compose → 4️⃣ Kubernetes → 5️⃣ API Gateway + Frontend → 6️⃣ Auth Service (JWT) → 7️⃣ Cart Service (FastAPI)
 
 ## 📋 Indice de contenidos
 
@@ -40,6 +43,7 @@ diferencias puntuales que se detallan aqui y se repiten en cada seccion donde ap
   Durante la instalacion, seleccionar "Git Bash Here" como opcion de menu contextual.
 - **Java 25**: instalador `.msi` disponible en https://adoptium.net
 - **Node.js 20+**: instalador `.msi` disponible en https://nodejs.org
+- **Python 3.12+**: instalador disponible en https://www.python.org/downloads/
 - **Docker Desktop**: ya instalado (incluye Kubernetes integrado para el laboratorio).
 
 Todos los comandos de esta guia deben ejecutarse desde **Git Bash**, no desde PowerShell ni
@@ -149,6 +153,7 @@ funcionan igual en Git Bash sin ninguna modificacion.
 
 - Java 25 (instalado y en PATH)
 - Node.js 20+ con npm (instalado y en PATH)
+- Python 3.12+ (instalado y en PATH)
 
 **Nota técnica:** En `products-java` se usa **Gradle Wrapper** (`./gradlew`), una herramienta que descarga la versión correcta de Gradle automáticamente. Esto evita conflictos de versiones y no requiere Gradle instalado globalmente — es una best practice en Java.
 
@@ -2602,7 +2607,254 @@ bash scripts/teardown.sh
 
 ---
 
-## 📚 Aprendizajes clave esperados (Fullstack 3 - Ingeniería de Software)
+## �️ Diagramas de la infraestructura completa
+
+### Diagrama 1 — Arquitectura general de la infraestructura
+
+Visión de todos los servicios desplegados en Kubernetes y sus relaciones.
+
+```mermaid
+graph TB
+    subgraph EXT["🌐 Exterior (Browser)"]
+        BROWSER["Browser\nhttp://micro.local"]
+    end
+
+    subgraph K8S["☸️ Namespace: microservicios"]
+        TRAEFIK["Traefik Ingress\nmicro.local:80"]
+
+        subgraph GW["API Gateway"]
+            KRAKEND["KrakenD\n:8080"]
+        end
+
+        subgraph FRONT["Frontend"]
+            NGINX["frontend-react\nnginx :80"]
+        end
+
+        subgraph AUTH["Auth Service (Fase 6)"]
+            AUTH_SVC["auth-service\nNode.js :3002"]
+            AUTH_PG["auth-postgres\nPostgreSQL :5432"]
+            AUTH_SECRET["Secret: auth-secrets\nJWT_SECRET · DB_*"]
+        end
+
+        subgraph CART["Cart Service (Fase 7)"]
+            CART_SVC["cart-service\nFastAPI :4022"]
+            CART_PG["cart-postgres\nPostgreSQL :5432"]
+            CART_SECRET["Secret: cart-secrets\nDB_*"]
+        end
+
+        subgraph MS["Microservicios"]
+            JAVA["products-java\nSpring Boot :4020"]
+            NODE["users-nodejs\nExpress :4021"]
+            PVC["PVC: users-data\n1Gi"]
+        end
+    end
+
+    BROWSER -->|"HTTP :80"| TRAEFIK
+    TRAEFIK -->|"/api  /health"| KRAKEND
+    TRAEFIK -->|"/auth"| AUTH_SVC
+    TRAEFIK -->|"/"| NGINX
+
+    KRAKEND -->|"/api/products*"| JAVA
+    KRAKEND -->|"/api/users*  /health"| NODE
+    KRAKEND -->|"/api/cart*  Authorization→"| CART_SVC
+
+    CART_SVC -->|"HTTP interno\nDNS del cluster"| JAVA
+    CART_SVC --- CART_PG
+    CART_SVC -.-|"JWT_SECRET"| AUTH_SECRET
+    CART_SVC --- CART_SECRET
+
+    AUTH_SVC --- AUTH_PG
+    AUTH_SVC --- AUTH_SECRET
+
+    NODE --- PVC
+
+    style EXT fill:#f0f4ff,stroke:#aab
+    style K8S fill:#f9f9f9,stroke:#ccc
+    style GW fill:#fff3cd,stroke:#f0ad4e
+    style FRONT fill:#d4edda,stroke:#28a745
+    style AUTH fill:#cce5ff,stroke:#0d6efd
+    style CART fill:#ffe5d0,stroke:#fd7e14
+    style MS fill:#e8d5f5,stroke:#6f42c1
+```
+
+---
+
+### Diagrama 2 — Flujo completo de una petición del carrito
+
+Muestra cómo fluye `GET /api/cart` desde el browser hasta enriquecer la respuesta con datos de `products-java`.
+
+```mermaid
+sequenceDiagram
+    actor U as 👤 Usuario<br/>(Browser)
+    participant T as Traefik<br/>Ingress
+    participant K as KrakenD<br/>:8080
+    participant C as cart-service<br/>FastAPI :4022
+    participant P as products-java<br/>Spring Boot :4020
+    participant DB as cart-postgres<br/>PostgreSQL
+
+    U->>T: GET /api/cart<br/>Authorization: Bearer JWT
+    T->>K: /api/cart (forwarded)
+    Note over K: input_headers: [Authorization]<br/>pasa el JWT al backend
+    K->>C: GET /cart<br/>Authorization: Bearer JWT
+
+    C->>C: get_current_user()<br/>valida JWT con JWT_SECRET
+    Note over C: Decodifica: sub=1, username="ana"
+
+    C->>DB: SELECT * FROM cart_items<br/>WHERE user_id = 1
+    DB-->>C: [{product_id:2, qty:3}, ...]
+
+    loop Por cada ítem del carrito
+        C->>P: GET /api/products/2<br/>(DNS interno: products-java:4020)
+        P-->>C: {id:2, name:"Laptop", price:999.99}
+    end
+
+    C->>C: Calcula subtotales y total
+
+    C-->>K: {"user":…, "items":[…], "total":2999.97}
+    K-->>T: Response (no-op, sin transformar)
+    T-->>U: 200 OK + JSON enriquecido
+```
+
+---
+
+### Diagrama 3 — Flujo de autenticación JWT
+
+Muestra cómo auth-service emite el token y cómo cart-service lo valida sin llamar al auth-service (secreto compartido).
+
+```mermaid
+sequenceDiagram
+    actor U as 👤 Usuario
+    participant F as Frontend<br/>React (nginx)
+    participant AS as auth-service<br/>Node.js :3002
+    participant PG as auth-postgres
+    participant CS as cart-service<br/>FastAPI :4022
+
+    Note over U,CS: 1️⃣ REGISTRO / LOGIN
+
+    U->>F: Click "Iniciar sesión"<br/>{username, password}
+    F->>AS: POST /auth/login
+    AS->>PG: SELECT usuario WHERE username=?
+    PG-->>AS: {id:1, password_hash:"$2b$..."}
+    AS->>AS: bcrypt.compare(password, hash)
+    AS-->>F: {token: "eyJhbGci...", user: {...}}
+    F->>F: localStorage.setItem("token", ...)
+    Note over F: AuthContext actualiza isLoggedIn=true
+
+    Note over U,CS: 2️⃣ USO DEL CARRITO (sin contactar auth-service)
+
+    U->>F: Click "🛒 Agregar"
+    F->>CS: POST /api/cart/items<br/>Authorization: Bearer eyJhbGci...
+    Note over CS: jose.jwt.decode(token, JWT_SECRET)<br/>Mismo secreto → sin HTTP call al auth-service
+    CS->>CS: user_id = payload["sub"]
+    CS-->>F: {message: "Producto agregado", item: {...}}
+
+    Note over U,CS: 🔑 El JWT_SECRET vive en k8s Secret "auth-secrets"<br/>Tanto auth-service como cart-service lo leen al arrancar
+```
+
+---
+
+### Diagrama 4 — Recursos de Kubernetes por fase
+
+Muestra qué objeto Kubernetes se despliega en cada fase del laboratorio.
+
+```mermaid
+graph LR
+    subgraph F4["Fase 4 — Kubernetes base"]
+        NS["Namespace\nmicroservicios"]
+        D1["Deployment\nproducts-java"]
+        S1["Service\nproducts-java :4020"]
+        D2["Deployment\nusers-nodejs"]
+        S2["Service\nusers-nodejs :4021"]
+        PVC1["PVC\nusers-data 1Gi"]
+        I1["Ingress\nmicro.local → svcs"]
+    end
+
+    subgraph F5["Fase 5 — API Gateway + Frontend"]
+        CM["ConfigMap\nkrakend.json"]
+        D3["Deployment\nkrakend"]
+        S3["Service\nkrakend :8080"]
+        D4["Deployment\nfrontend-react"]
+        S4["Service\nfrontend-react :80"]
+        I2["Ingress v2\n/api→krakend /→frontend"]
+    end
+
+    subgraph F6["Fase 6 — Auth Service"]
+        SEC1["Secret\nauth-secrets"]
+        D5["Deployment\nauth-postgres"]
+        S5["Service\nauth-postgres :5432"]
+        PVC2["PVC\nauth-postgres 1Gi"]
+        D6["Deployment\nauth-service"]
+        S6["Service\nauth-service :3002"]
+        I3["Ingress v3\n/auth→auth-service"]
+    end
+
+    subgraph F7["Fase 7 — Cart Service"]
+        SEC2["Secret\ncart-secrets"]
+        D7["Deployment\ncart-postgres"]
+        S7["Service\ncart-postgres :5432"]
+        PVC3["PVC\ncart-postgres 1Gi"]
+        D8["Deployment\ncart-service"]
+        S8["Service\ncart-service :4022"]
+        CM2["ConfigMap v2\nkrakend + /api/cart*"]
+    end
+
+    F4 --> F5 --> F6 --> F7
+
+    style F4 fill:#e8d5f5,stroke:#6f42c1,color:#000
+    style F5 fill:#fff3cd,stroke:#f0ad4e,color:#000
+    style F6 fill:#cce5ff,stroke:#0d6efd,color:#000
+    style F7 fill:#ffe5d0,stroke:#fd7e14,color:#000
+```
+
+---
+
+### Diagrama 5 — Mapa de rutas HTTP completo
+
+Todas las rutas expuestas públicamente (a través de Traefik → KrakenD) y las internas (dentro del cluster).
+
+```mermaid
+graph TD
+    ML["micro.local :80"]
+    ML -->|"GET /api/products"| KR["KrakenD :8080"]
+    ML -->|"GET /api/products/{id}"| KR
+    ML -->|"GET /api/users"| KR
+    ML -->|"GET /api/users/{id}"| KR
+    ML -->|"POST /api/users"| KR
+    ML -->|"GET /health"| KR
+    ML -->|"GET /api/cart/health"| KR
+    ML -->|"GET /api/cart 🔐"| KR
+    ML -->|"POST /api/cart/items 🔐"| KR
+    ML -->|"PATCH /api/cart/items/{id} 🔐"| KR
+    ML -->|"DELETE /api/cart/items/{id} 🔐"| KR
+    ML -->|"DELETE /api/cart 🔐"| KR
+
+    ML -->|"POST /auth/register"| AU["auth-service :3002"]
+    ML -->|"POST /auth/login"| AU
+    ML -->|"GET /auth/me 🔐"| AU
+    ML -->|"GET /auth/health"| AU
+
+    ML -->|"GET /"| FE["frontend-react :80"]
+
+    KR -->|"productos"| PJ["products-java :4020"]
+    KR -->|"usuarios"| UN["users-nodejs :4021"]
+    KR -->|"carrito"| CS["cart-service :4022"]
+
+    CS -.->|"HTTP interno\nfetch_product()"| PJ
+
+    style ML fill:#343a40,color:#fff
+    style KR fill:#f0ad4e,color:#000
+    style AU fill:#0d6efd,color:#fff
+    style FE fill:#28a745,color:#fff
+    style PJ fill:#6f42c1,color:#fff
+    style UN fill:#20c997,color:#fff
+    style CS fill:#fd7e14,color:#fff
+```
+
+> 🔐 = endpoint protegido, requiere `Authorization: Bearer <JWT>`
+
+---
+
+## �📚 Aprendizajes clave esperados (Fullstack 3 - Ingeniería de Software)
 
 Después de completar este laboratorio, deberías entender:
 

@@ -35,6 +35,18 @@ kubectl get ingressclass traefik > /dev/null 2>&1 || {
 echo "  ✅ Cluster OK — Traefik disponible"
 echo ""
 
+# ── Hosts ────────────────────────────────────────────────────────────────
+if grep -q "micro.local" /etc/hosts 2>/dev/null; then
+  echo "  ✅ micro.local ya está en /etc/hosts"
+else
+  echo "  ⚠️  micro.local NO está en /etc/hosts."
+  echo "     Ejecuta el siguiente comando y luego vuelve a probar en el navegador:"
+  echo ""
+  echo "       macOS/Linux:  echo '127.0.0.1 micro.local' | sudo tee -a /etc/hosts"
+  echo "       Windows:      Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value '127.0.0.1 micro.local'"
+  echo ""
+fi
+
 # ── Fase 4: Namespace + Microservicios ──────────────────────────────────
 echo ">>> FASE 4: Build de imágenes de microservicios..."
 docker build -t products-java:1.0 ./products-java

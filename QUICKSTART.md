@@ -263,11 +263,15 @@ O manualmente:
 kubectl delete -f k8s/ingress-traefik-v3-gateway-auth.yaml --ignore-not-found
 kubectl delete -f k8s/ingress-traefik-v2-gateway.yaml       --ignore-not-found
 kubectl delete -f k8s/ingress-traefik.yaml                  --ignore-not-found
+kubectl delete -f cart-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f cart-service/k8s/postgres.yaml   --ignore-not-found
+kubectl delete -f cart-service/k8s/secrets.yaml    --ignore-not-found
 kubectl delete -f auth-service/k8s/deployment.yaml --ignore-not-found
 kubectl delete -f auth-service/k8s/postgres.yaml   --ignore-not-found
 kubectl delete -f auth-service/k8s/secrets.yaml    --ignore-not-found
 kubectl delete -f frontend-react/k8s/deployment.yaml   --ignore-not-found
 kubectl delete -f krakend/k8s/deployment.yaml          --ignore-not-found
+kubectl delete -f krakend/k8s/krakend-config-v2.yaml   --ignore-not-found
 kubectl delete -f krakend/k8s/krakend-config.yaml      --ignore-not-found
 kubectl delete -f users-nodejs/k8s/deployment.yaml  --ignore-not-found
 kubectl delete -f products-java/k8s/deployment.yaml --ignore-not-found

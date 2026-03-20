@@ -1,6 +1,6 @@
 # Ingress actualizado para la Fase 6 del laboratorio.
-# Extiende la Fase 5 agregando una plataforma de autenticacion (Keycloak)
-# expuesta en /auth.
+# Extiende la Fase 5 agregando el auth-service (JWT/PostgreSQL)
+# expuesto en /auth.
 #
 # Para aplicar este ingress (reemplaza al anterior):
 #   kubectl apply -f k8s/ingress-traefik-v3-gateway-auth.yaml

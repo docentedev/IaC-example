@@ -33,7 +33,7 @@ router.post('/register', async (req, res) => {
 
     const user  = result.rows[0]
     const token = jwt.sign(
-      { sub: user.id, username: user.username, email: user.email },
+      { sub: String(user.id), username: user.username, email: user.email },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES }
     )
@@ -84,7 +84,7 @@ router.post('/login', async (req, res) => {
     }
 
     const token = jwt.sign(
-      { sub: user.id, username: user.username, email: user.email },
+      { sub: String(user.id), username: user.username, email: user.email },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES }
     )

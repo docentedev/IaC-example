@@ -10,8 +10,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 import httpx
 
-from .db import get_pool
-from .auth import get_current_user
+from ..db import get_pool
+from ..auth import get_current_user
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 

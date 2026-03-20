@@ -96,7 +96,6 @@ data:
         },
 
         {
-          "comment": "── Cart-service endpoints (Phase 7) ─────────────────────────────────────",
           "endpoint": "/api/cart/health",
           "method": "GET",
           "output_encoding": "json",
