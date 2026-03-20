@@ -15,15 +15,21 @@ kubectl delete -f "$ROOT/k8s/ingress-traefik-v3-gateway-auth.yaml" --ignore-not-
 kubectl delete -f "$ROOT/k8s/ingress-traefik-v2-gateway.yaml"       --ignore-not-found
 kubectl delete -f "$ROOT/k8s/ingress-traefik.yaml"                  --ignore-not-found
 
+# Fase 7 — Cart Service
+kubectl delete -f "$ROOT/cart-service/k8s/deployment.yaml" --ignore-not-found
+kubectl delete -f "$ROOT/cart-service/k8s/postgres.yaml"   --ignore-not-found
+kubectl delete -f "$ROOT/cart-service/k8s/secrets.yaml"    --ignore-not-found
+
 # Fase 6 — Auth Service
 kubectl delete -f "$ROOT/auth-service/k8s/deployment.yaml" --ignore-not-found
 kubectl delete -f "$ROOT/auth-service/k8s/postgres.yaml"   --ignore-not-found
 kubectl delete -f "$ROOT/auth-service/k8s/secrets.yaml"    --ignore-not-found
 
 # Fase 5 — Frontend + KrakenD
-kubectl delete -f "$ROOT/frontend-react/k8s/deployment.yaml"   --ignore-not-found
-kubectl delete -f "$ROOT/krakend/k8s/deployment.yaml"          --ignore-not-found
-kubectl delete -f "$ROOT/krakend/k8s/krakend-config.yaml"      --ignore-not-found
+kubectl delete -f "$ROOT/frontend-react/k8s/deployment.yaml"      --ignore-not-found
+kubectl delete -f "$ROOT/krakend/k8s/deployment.yaml"             --ignore-not-found
+kubectl delete -f "$ROOT/krakend/k8s/krakend-config-v2.yaml"      --ignore-not-found
+kubectl delete -f "$ROOT/krakend/k8s/krakend-config.yaml"         --ignore-not-found
 
 # Fase 4 — Microservicios
 kubectl delete -f "$ROOT/users-nodejs/k8s/deployment.yaml"  --ignore-not-found
@@ -42,6 +48,7 @@ docker rmi -f \
   users-nodejs:1.0 \
   frontend-react:1.0 \
   auth-service:1.0 \
+  cart-service:1.0 \
   2>/dev/null || true
 
 echo ""

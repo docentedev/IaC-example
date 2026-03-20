@@ -1,0 +1,65 @@
+---
+# ── Deployment del cart-service ───────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cart-service
+  namespace: microservicios
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cart-service
+  template:
+    metadata:
+      labels:
+        app: cart-service
+    spec:
+      containers:
+        - name: cart-service
+          image: cart-service:1.0
+          imagePullPolicy: Never   # imagen local (Rancher Desktop)
+          ports:
+            - containerPort: 4022
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: cart-secrets
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cart-secrets
+                  key: DB_PASSWORD
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: cart-secrets
+                  key: DB_NAME
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: cart-secrets
+                  key: DB_HOST
+            # JWT_SECRET reutilizado del Secret del auth-service
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: auth-secrets
+                  key: JWT_SECRET
+            - name: PRODUCTS_SERVICE_URL
+              value: "http://products-java:4020"
+---
+# ── Service ClusterIP ─────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: cart-service
+  namespace: microservicios
+spec:
+  selector:
+    app: cart-service
+  ports:
+    - port: 4022
+      targetPort: 4022

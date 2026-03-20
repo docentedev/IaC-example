@@ -1,0 +1,183 @@
+# ConfigMap v2: agrega los endpoints del cart-service a la configuracion existente.
+# Para aplicar: kubectl apply -f krakend-config-v2.yaml
+#               kubectl rollout restart deployment krakend -n microservicios
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: krakend-config
+  namespace: microservicios
+data:
+  krakend.json: |
+    {
+      "$schema": "https://www.krakend.io/schema/v3.json",
+      "version": 3,
+      "name": "API Gateway - Microservicios DuocUC",
+      "timeout": "3000ms",
+      "cache_ttl": "300s",
+      "output_encoding": "json",
+      "endpoints": [
+        {
+          "endpoint": "/api/products",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "backend": [
+            {
+              "url_pattern": "/api/products",
+              "encoding": "no-op",
+              "host": ["http://products-java:4020"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/products/{id}",
+          "method": "GET",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/api/products/{id}",
+              "encoding": "json",
+              "host": ["http://products-java:4020"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/users",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "backend": [
+            {
+              "url_pattern": "/api/users",
+              "encoding": "no-op",
+              "host": ["http://users-nodejs:4021"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/users/{id}",
+          "method": "GET",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/api/users/{id}",
+              "encoding": "json",
+              "host": ["http://users-nodejs:4021"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/users",
+          "method": "POST",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/api/users",
+              "encoding": "json",
+              "host": ["http://users-nodejs:4021"],
+              "method": "POST"
+            }
+          ]
+        },
+        {
+          "endpoint": "/health",
+          "method": "GET",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/health",
+              "encoding": "json",
+              "host": ["http://users-nodejs:4021"],
+              "method": "GET"
+            }
+          ]
+        },
+
+        {
+          "comment": "── Cart-service endpoints (Phase 7) ─────────────────────────────────────",
+          "endpoint": "/api/cart/health",
+          "method": "GET",
+          "output_encoding": "json",
+          "backend": [
+            {
+              "url_pattern": "/cart/health",
+              "encoding": "json",
+              "host": ["http://cart-service:4022"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/cart",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "backend": [
+            {
+              "url_pattern": "/cart",
+              "encoding": "no-op",
+              "host": ["http://cart-service:4022"],
+              "method": "GET"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/cart/items",
+          "method": "POST",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization", "Content-Type"],
+          "backend": [
+            {
+              "url_pattern": "/cart/items",
+              "encoding": "no-op",
+              "host": ["http://cart-service:4022"],
+              "method": "POST"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/cart/items/{product_id}",
+          "method": "PATCH",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization", "Content-Type"],
+          "backend": [
+            {
+              "url_pattern": "/cart/items/{product_id}",
+              "encoding": "no-op",
+              "host": ["http://cart-service:4022"],
+              "method": "PATCH"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/cart/items/{product_id}",
+          "method": "DELETE",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "backend": [
+            {
+              "url_pattern": "/cart/items/{product_id}",
+              "encoding": "no-op",
+              "host": ["http://cart-service:4022"],
+              "method": "DELETE"
+            }
+          ]
+        },
+        {
+          "endpoint": "/api/cart",
+          "method": "DELETE",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "backend": [
+            {
+              "url_pattern": "/cart",
+              "encoding": "no-op",
+              "host": ["http://cart-service:4022"],
+              "method": "DELETE"
+            }
+          ]
+        }
+      ]
+    }

@@ -82,6 +82,23 @@ wait_pods
 echo "  ✅ Fase 6 completa — http://micro.local/auth/health"
 echo ""
 
+# ── Fase 7: Cart Service ─────────────────────────────────────────────────
+echo ">>> FASE 7: Build de imagen cart-service..."
+docker build -t cart-service:1.0 ./cart-service
+echo "  ✅ Imagen cart-service construida"
+echo ""
+
+echo ">>> FASE 7: Desplegando cart-service + PostgreSQL..."
+kubectl apply -f cart-service/k8s/secrets.yaml
+kubectl apply -f cart-service/k8s/postgres.yaml
+kubectl apply -f cart-service/k8s/deployment.yaml
+# Aplica la nueva config de KrakenD que incluye los endpoints /api/cart/*
+kubectl apply -f krakend/k8s/krakend-config-v2.yaml
+kubectl rollout restart deployment krakend -n microservicios
+wait_pods
+echo "  ✅ Fase 7 completa — http://micro.local/api/cart/health"
+echo ""
+
 # ── Resumen ──────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════╗"
 echo "║  ✅ DEPLOY COMPLETO                      ║"
@@ -95,4 +112,6 @@ echo "  KrakenD:    http://micro.local/health"
 echo "  Auth:       http://micro.local/auth/health"
 echo "  Register:   POST http://micro.local/auth/register"
 echo "  Login:      POST http://micro.local/auth/login"
+echo "  Cart:       GET  http://micro.local/api/cart         (JWT requerido)"
+echo "  Cart:       POST http://micro.local/api/cart/items   (JWT requerido)"
 echo ""

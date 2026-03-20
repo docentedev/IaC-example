@@ -23,7 +23,8 @@ Veras cómo evolucionan estos servicios: 1️⃣ manual local → 2️⃣ Docker
 3. [Docker Compose](#3-ejecutar-con-docker-compose)
 4. [Kubernetes](#4-base-para-kubernetes-siguiente-paso)
 5. [API Gateway + Frontend React](#5-api-gateway--frontend-react-e2e-completo)
-6. [Auth Service (JWT + PostgreSQL)](#6-auth-service-jwt--postgresql) ← **Fase final del laboratorio**
+6. [Auth Service (JWT + PostgreSQL)](#6-auth-service-jwt--postgresql)
+7. [Cart Service (FastAPI + inter-microservicio)](#7-cart-service-fastapipython--comunicación-inter-microservicio) ← **Fase final del laboratorio**
 
 ---
 
@@ -2456,6 +2457,151 @@ bash scripts/teardown.sh
 
 ---
 
+## 7) Cart Service (FastAPI/Python) — Comunicación inter-microservicio
+
+**Objetivo:** demostrar cómo un microservicio llama a otro **dentro del cluster de Kubernetes** usando el DNS interno, sin pasar por el API Gateway.
+
+La cadena completa es:
+```
+Browser → Traefik → KrakenD → cart-service:4022 → products-java:4020
+```
+
+### Stack técnico
+
+| Componente | Tecnología |
+|---|---|
+| API | FastAPI 0.111 + uvicorn |
+| Base de datos | asyncpg (PostgreSQL no bloqueante) |
+| JWT | python-jose (HS256, mismo secreto que auth-service) |
+| HTTP interno | httpx async |
+
+### Archivos nuevos
+
+- `cart-service/src/main.py` — app FastAPI, lifespan, CORS
+- `cart-service/src/db.py` — pool asyncpg, creación de tabla `cart_items`
+- `cart-service/src/auth.py` — dependencia `get_current_user()`, valida JWT
+- `cart-service/src/routes/cart.py` — endpoints GET/POST/PATCH/DELETE
+- `cart-service/k8s/secrets.yaml` — credenciales de cart-postgres
+- `cart-service/k8s/postgres.yaml` — PostgreSQL dedicado para el carrito
+- `cart-service/k8s/deployment.yaml` — Deployment + Service (ClusterIP, port 4022)
+- `krakend/k8s/krakend-config-v2.yaml` — ConfigMap v2 con endpoints `/api/cart/*`
+
+### Tabla cart_items
+
+| Campo | Tipo | Restricción |
+|---|---|---|
+| `user_id` | INTEGER | FK implícita al `sub` del JWT |
+| `product_id` | INTEGER | ID del producto en products-java |
+| `quantity` | INTEGER | > 0 |
+| `(user_id, product_id)` | UNIQUE | evita duplicados |
+
+### Build
+
+```bash
+docker build -t cart-service:1.0 ./cart-service
+```
+
+### Despliegue
+
+```bash
+kubectl apply -f cart-service/k8s/secrets.yaml
+kubectl apply -f cart-service/k8s/postgres.yaml
+kubectl apply -f cart-service/k8s/deployment.yaml
+kubectl apply -f krakend/k8s/krakend-config-v2.yaml
+kubectl rollout restart deployment krakend -n microservicios
+```
+
+### Endpoints disponibles
+
+| Método | Ruta | Auth | Descripción |
+|---|---|---|---|
+| `GET` | `/api/cart/health` | No | Health check |
+| `GET` | `/api/cart` | JWT | Carrito completo con datos de producto |
+| `POST` | `/api/cart/items` | JWT | Agrega producto (body: `{product_id, quantity}`) |
+| `PATCH` | `/api/cart/items/{product_id}` | JWT | Actualiza cantidad |
+| `DELETE` | `/api/cart/items/{product_id}` | JWT | Elimina un ítem |
+| `DELETE` | `/api/cart` | JWT | Vacía todo el carrito |
+
+### Prueba con curl
+
+```bash
+# Health (sin JWT)
+curl http://micro.local/api/cart/health
+
+# Login para obtener token
+TOKEN=$(curl -s -X POST http://micro.local/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"ana","password":"123456"}' | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+
+# Ver carrito (vacío)
+curl -H "Authorization: Bearer $TOKEN" http://micro.local/api/cart
+
+# Agregar producto
+curl -X POST http://micro.local/api/cart/items \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"product_id": 1, "quantity": 2}'
+
+# Ver carrito enriquecido con datos del producto
+curl -H "Authorization: Bearer $TOKEN" http://micro.local/api/cart
+
+# Vaciar carrito
+curl -X DELETE -H "Authorization: Bearer $TOKEN" http://micro.local/api/cart
+```
+
+### Respuesta de GET /api/cart
+
+```json
+{
+  "user": { "id": 1, "username": "ana", "email": "ana@duoc.cl" },
+  "items": [
+    {
+      "id": 3,
+      "product_id": 1,
+      "quantity": 2,
+      "product": { "id": 1, "name": "Laptop", "price": 999.99 },
+      "subtotal": 1999.98
+    }
+  ],
+  "total": 1999.98
+}
+```
+
+### Comunicación inter-microservicio (punto pedagógico clave)
+
+Dentro de `cart-service/src/routes/cart.py`, la función `fetch_product()` hace una llamada HTTP directa usando el **DNS interno de Kubernetes**:
+
+```python
+async with httpx.AsyncClient(timeout=3.0) as client:
+    r = await client.get(f"http://products-java:4020/api/products/{product_id}")
+```
+
+`products-java` resuelve al Service de Kubernetes del mismo nombre, en el namespace `microservicios`. Esta comunicación ocurre **dentro del cluster**, sin pasar por Traefik ni KrakenD.
+
+### Rollback Fase 7 → Fase 6
+
+```bash
+kubectl apply -f krakend/k8s/krakend-config.yaml
+kubectl rollout restart deployment krakend -n microservicios
+kubectl delete -f cart-service/k8s/deployment.yaml --ignore-not-found
+kubectl delete -f cart-service/k8s/postgres.yaml   --ignore-not-found
+kubectl delete -f cart-service/k8s/secrets.yaml    --ignore-not-found
+```
+
+### Script de despliegue completo (todas las fases en un comando)
+
+```bash
+bash scripts/deploy-all.sh
+```
+
+### Script de limpieza completa
+
+```bash
+bash scripts/teardown.sh
+```
+
+---
+
 ## 📚 Aprendizajes clave esperados (Fullstack 3 - Ingeniería de Software)
 
 Después de completar este laboratorio, deberías entender:
@@ -2485,6 +2631,7 @@ Después de completar este laboratorio, deberías entender:
 - Fase 3: Docker Compose las exponía automáticamente.
 - Fase 4: **Kubernetes + Ingress + Traefik** = punto único de entrada + routing inteligente.
 - Fase 5: **KrakenD** como API Gateway centraliza auth, rate limiting y transformacion. **nginx** sirve el frontend React estático. El e2e queda completo: browser → Traefik → KrakenD → microservicios.
+- Fase 7: **cart-service** llama a **products-java** internamente (DNS de cluster). Esta es la comunicación inter-microservicio real, directa, sin pasar por el API Gateway.
 
 ### 6️⃣ Infrastructure as Code (IaC): YAML manifests
 - Los archivos `deployment.yaml`, `service.yaml`, `ingress.yaml` **declaran el estado deseado**.
@@ -2517,4 +2664,4 @@ Después de completar este laboratorio, deberías entender:
 
 ---
 
-**Última actualización:** Marzo 2026 | **Para:** Estudiantes DUOC Fullstack 3 - Ingeniería de Software
+**Última actualización:** Junio 2026 | **Para:** Estudiantes DUOC Fullstack 3 - Ingeniería de Software

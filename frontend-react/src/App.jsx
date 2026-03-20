@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useAuth } from './auth/AuthContext.jsx'
 
 const BASE_URL = '/api'
@@ -127,9 +127,131 @@ function AuthPanel() {
   )
 }
 
+// ─── CartPanel ────────────────────────────────────────────────────────────────
+// Muestra el carrito del usuario autenticado.
+// Cuando el usuario NO está logueado, el panel se muestra deshabilitado
+// (para que el alumno vea la integración incluso antes de autenticarse).
+// Los datos del carrito se enriquecen con info del producto en el back-end
+// (cart-service llama internamente a products-java: comunicación inter-servicio).
+function CartPanel({ onAddToCart }) {
+  const { isLoggedIn, token } = useAuth()
+  const [cart, setCart]       = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError]     = useState(null)
+
+  const fetchCart = useCallback(async () => {
+    if (!isLoggedIn || !token) { setCart(null); return }
+    setLoading(true)
+    try {
+      const r = await fetch(`${BASE_URL}/cart`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      const data = await r.json()
+      setCart(data)
+      setError(null)
+    } catch (e) {
+      setError('cart-service no disponible (Phase 7 pendiente de deploy)')
+    } finally {
+      setLoading(false)
+    }
+  }, [isLoggedIn, token])
+
+  // Recarga el carrito cuando cambia el estado de sesión.
+  useEffect(() => { fetchCart() }, [fetchCart])
+
+  // Expone fetchCart al padre para que pueda refrescar tras agregar un ítem.
+  useEffect(() => {
+    if (onAddToCart) onAddToCart.current = fetchCart
+  }, [fetchCart, onAddToCart])
+
+  const btnStyle = (bg, disabled) => ({
+    background: disabled ? '#aaa' : bg,
+    color: 'white', border: 'none',
+    padding: '0.3rem 0.8rem', borderRadius: 6,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: '0.85rem',
+  })
+
+  async function removeItem(product_id) {
+    await fetch(`${BASE_URL}/cart/items/${product_id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    fetchCart()
+  }
+
+  async function clearCart() {
+    await fetch(`${BASE_URL}/cart`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    fetchCart()
+  }
+
+  return (
+    <section style={{ marginBottom: '2rem', padding: '1rem', border: '1px solid #f0c040', borderRadius: 8 }}>
+      <h2>🛒 Carrito de compras (cart-service)</h2>
+
+      {!isLoggedIn && (
+        <p style={{ color: '#888' }}>
+          Inicia sesión para ver tu carrito. Este panel consume <strong>cart-service</strong>{' '}
+          (FastAPI/Python) que a su vez llama a <strong>products-java</strong> internamente.
+        </p>
+      )}
+
+      {isLoggedIn && loading && <p>Cargando carrito...</p>}
+
+      {isLoggedIn && error && (
+        <p style={{ color: '#b06000' }}>{error}</p>
+      )}
+
+      {isLoggedIn && cart && !loading && (
+        <>
+          {cart.items.length === 0 ? (
+            <p style={{ color: '#555' }}>Tu carrito está vacío. Agrega productos desde la lista de abajo.</p>
+          ) : (
+            <>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #ddd', textAlign: 'left' }}>
+                    <th>Producto</th><th>Precio</th><th>Cant.</th><th>Subtotal</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cart.items.map((item) => (
+                    <tr key={item.product_id} style={{ borderBottom: '1px solid #eee' }}>
+                      <td>{item.product ? item.product.name : `#${item.product_id}`}</td>
+                      <td>${item.product ? Number(item.product.price).toFixed(2) : '—'}</td>
+                      <td>{item.quantity}</td>
+                      <td>${item.subtotal.toFixed(2)}</td>
+                      <td>
+                        <button style={btnStyle('#c00', false)} onClick={() => removeItem(item.product_id)}>
+                          ✕
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ textAlign: 'right', fontWeight: 'bold', marginTop: '0.5rem' }}>
+                Total: ${cart.total.toFixed(2)}
+              </p>
+              <button style={btnStyle('#888', false)} onClick={clearCart}>Vaciar carrito</button>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  )
+}
+
 export default function App() {
+  const { isLoggedIn, token } = useAuth()
   const [products, setProducts] = useState(null)
-  const [users, setUsers] = useState(null)
+  const [users, setUsers]       = useState(null)
+  // Ref para poder llamar fetchCart desde el botón "Agregar al carrito".
+  const refreshCart = useRef(null)
 
   useEffect(() => {
     fetch(`${BASE_URL}/products`)
@@ -145,8 +267,27 @@ export default function App() {
       .catch(() => setUsers({ error: 'No se pudo conectar con users-nodejs' }))
   }, [])
 
+  async function addToCart(product_id) {
+    if (!isLoggedIn || !token) return
+    await fetch(`${BASE_URL}/cart/items`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id, quantity: 1 }),
+    })
+    // Refresca el panel del carrito tras agregar.
+    if (refreshCart.current) refreshCart.current()
+  }
+
+  const btnAddStyle = (disabled) => ({
+    background: disabled ? '#ccc' : '#0b5fff',
+    color: 'white', border: 'none',
+    padding: '0.2rem 0.6rem', borderRadius: 4,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    fontSize: '0.8rem', marginLeft: '0.5rem',
+  })
+
   return (
-    <div style={{ fontFamily: 'sans-serif', maxWidth: '700px', margin: '2rem auto', padding: '0 1rem' }}>
+    <div style={{ fontFamily: 'sans-serif', maxWidth: '760px', margin: '2rem auto', padding: '0 1rem' }}>
       <h1>Microservicios DuocUC</h1>
       <p style={{ color: '#555' }}>
         Frontend estático servido por nginx &rarr; Traefik &rarr; KrakenD &rarr; microservicios
@@ -154,10 +295,24 @@ export default function App() {
 
       <AuthPanel />
 
+      <CartPanel onAddToCart={refreshCart} />
+
       <Section
         title="Productos (products-java)"
         items={products}
-        renderItem={(p) => `[${p.id}] ${p.name} — $${p.price}`}
+        renderItem={(p) => (
+          <span>
+            [{p.id}] {p.name} — ${p.price}
+            <button
+              style={btnAddStyle(!isLoggedIn)}
+              disabled={!isLoggedIn}
+              title={isLoggedIn ? 'Agregar al carrito' : 'Inicia sesión para agregar'}
+              onClick={() => addToCart(p.id)}
+            >
+              🛒 Agregar
+            </button>
+          </span>
+        )}
       />
 
       <Section
