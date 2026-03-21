@@ -2463,6 +2463,13 @@ bash scripts/deploy-all.sh
 bash scripts/teardown.sh
 ```
 
+Notas importantes del script `teardown.sh`:
+- Por defecto elimina despliegues/ingress y conserva datos de Kubernetes (PVC/namespace) para acelerar el siguiente despliegue.
+- Para borrar imagenes: `bash scripts/teardown.sh --delete-images`.
+- Para borrar volumenes: `bash scripts/teardown.sh --delete-volumes`.
+- Para borrar datos persistentes de Kubernetes: `bash scripts/teardown.sh --delete-k8s-data`.
+- Para limpieza total: `bash scripts/teardown.sh --full-clean`.
+
 ---
 
 ## 7) Cart Service (FastAPI/Python) — Comunicación inter-microservicio
@@ -2607,6 +2614,13 @@ bash scripts/deploy-all.sh
 ```bash
 bash scripts/teardown.sh
 ```
+
+Notas importantes del script `teardown.sh`:
+- Por defecto elimina despliegues/ingress y conserva datos de Kubernetes (PVC/namespace) para acelerar el siguiente despliegue.
+- Para borrar imagenes: `bash scripts/teardown.sh --delete-images`.
+- Para borrar volumenes: `bash scripts/teardown.sh --delete-volumes`.
+- Para borrar datos persistentes de Kubernetes: `bash scripts/teardown.sh --delete-k8s-data`.
+- Para limpieza total: `bash scripts/teardown.sh --full-clean`.
 
 ---
 

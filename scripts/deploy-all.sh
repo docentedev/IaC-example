@@ -7,19 +7,58 @@
 set -eu
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+NAMESPACE="microservicios"
 cd "$ROOT"
 
-# ─────────────────────────────────────────────
+print_section() {
+  echo ""
+  echo "$1"
+}
+
 wait_pods() {
   echo "  Esperando que todos los pods estén Running..."
-  kubectl wait --for=condition=Ready pods --all -n microservicios \
+  kubectl wait --for=condition=Ready pods --all -n "$NAMESPACE" \
     --timeout=120s 2>/dev/null || true
-  kubectl get pods -n microservicios
+  kubectl get pods -n "$NAMESPACE"
 }
-# ─────────────────────────────────────────────
 
-echo ""
-echo "╔══════════════════════════════════════════╗"
+build_image() {
+  local label="$1"
+  local image="$2"
+  local context_dir="$3"
+
+  print_section ">>> ${label}"
+  docker build -t "$image" "$context_dir"
+}
+
+apply_manifests() {
+  for manifest in "$@"; do
+    kubectl apply -f "$manifest"
+  done
+}
+
+print_hosts_notice() {
+  # ── Hosts ────────────────────────────────────────────────────────────────
+  if grep -q "micro.local" /etc/hosts 2>/dev/null; then
+    echo "  ✅ micro.local ya está en /etc/hosts"
+  else
+    echo "  ⚠️  micro.local NO está en /etc/hosts."
+    echo "     Ejecuta el siguiente comando y luego vuelve a probar en el navegador:"
+    echo ""
+    echo "       macOS/Linux:  echo '127.0.0.1 micro.local' | sudo tee -a /etc/hosts"
+    echo "       Windows:      Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value '127.0.0.1 micro.local'"
+    echo ""
+  fi
+}
+
+complete_phase() {
+  local message="$1"
+  wait_pods
+  echo "  ✅ ${message}"
+  echo ""
+}
+
+print_section "╔══════════════════════════════════════════╗"
 echo "║  DEPLOY COMPLETO — Laboratorio DUOC      ║"
 echo "╚══════════════════════════════════════════╝"
 echo ""
@@ -35,81 +74,61 @@ kubectl get ingressclass traefik > /dev/null 2>&1 || {
 echo "  ✅ Cluster OK — Traefik disponible"
 echo ""
 
-# ── Hosts ────────────────────────────────────────────────────────────────
-if grep -q "micro.local" /etc/hosts 2>/dev/null; then
-  echo "  ✅ micro.local ya está en /etc/hosts"
-else
-  echo "  ⚠️  micro.local NO está en /etc/hosts."
-  echo "     Ejecuta el siguiente comando y luego vuelve a probar en el navegador:"
-  echo ""
-  echo "       macOS/Linux:  echo '127.0.0.1 micro.local' | sudo tee -a /etc/hosts"
-  echo "       Windows:      Add-Content -Path C:\\Windows\\System32\\drivers\\etc\\hosts -Value '127.0.0.1 micro.local'"
-  echo ""
-fi
-
 # ── Fase 4: Namespace + Microservicios ──────────────────────────────────
-echo ">>> FASE 4: Build de imágenes de microservicios..."
-docker build -t product-service:1.0 ./product-service
-docker build -t user-service:1.0  ./user-service
+build_image "FASE 4: Build de imagen product-service..." "product-service:1.0" "./product-service"
+build_image "FASE 4: Build de imagen user-service..." "user-service:1.0" "./user-service"
 echo "  ✅ Imágenes de microservicios construidas"
 echo ""
 
-echo ">>> FASE 4: Desplegando namespace y microservicios..."
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f user-service/k8s/pvc.yaml
-kubectl apply -f product-service/k8s/deployment.yaml
-kubectl apply -f user-service/k8s/deployment.yaml
-kubectl apply -f k8s/ingress-traefik.yaml
-wait_pods
-echo "  ✅ Fase 4 completa — http://micro.local/api/products"
-echo ""
+print_section ">>> FASE 4: Desplegando namespace y microservicios..."
+apply_manifests \
+  k8s/namespace.yaml \
+  user-service/k8s/pvc.yaml \
+  product-service/k8s/deployment.yaml \
+  user-service/k8s/deployment.yaml \
+  k8s/ingress-traefik.yaml
+complete_phase "Fase 4 completa — http://micro.local/api/products"
 
 # ── Fase 5: API Gateway + Frontend ──────────────────────────────────────
-echo ">>> FASE 5: Build de imagen frontend..."
-docker build -t frontend-service:1.0 ./frontend-service
+build_image "FASE 5: Build de imagen frontend..." "frontend-service:1.0" "./frontend-service"
 echo "  ✅ Imagen frontend construida"
 echo ""
 
-echo ">>> FASE 5: Desplegando KrakenD y frontend..."
-kubectl apply -f krakend/k8s/krakend-config.yaml
-kubectl apply -f krakend/k8s/deployment.yaml
-kubectl apply -f frontend-service/k8s/deployment.yaml
-kubectl apply -f k8s/ingress-traefik-v2-gateway.yaml
-wait_pods
-echo "  ✅ Fase 5 completa — http://micro.local"
-echo ""
+print_section ">>> FASE 5: Desplegando KrakenD y frontend..."
+apply_manifests \
+  krakend/k8s/krakend-config.yaml \
+  krakend/k8s/deployment.yaml \
+  frontend-service/k8s/deployment.yaml \
+  k8s/ingress-traefik-v2-gateway.yaml
+complete_phase "Fase 5 completa — http://micro.local"
 
 # ── Fase 6: Auth Service ─────────────────────────────────────────────────
-echo ">>> FASE 6: Build de imagen auth-service..."
-docker build -t auth-service:1.0 ./auth-service
+build_image "FASE 6: Build de imagen auth-service..." "auth-service:1.0" "./auth-service"
 echo "  ✅ Imagen auth-service construida"
 echo ""
 
-echo ">>> FASE 6: Desplegando auth-service + PostgreSQL..."
-kubectl apply -f auth-service/k8s/secrets.yaml
-kubectl apply -f auth-service/k8s/postgres.yaml
-kubectl apply -f auth-service/k8s/deployment.yaml
-kubectl apply -f k8s/ingress-traefik-v3-gateway-auth.yaml
-wait_pods
-echo "  ✅ Fase 6 completa — endpoints auth disponibles en /auth/register, /auth/login y /auth/me"
-echo ""
+print_section ">>> FASE 6: Desplegando auth-service + PostgreSQL..."
+apply_manifests \
+  auth-service/k8s/secrets.yaml \
+  auth-service/k8s/postgres.yaml \
+  auth-service/k8s/deployment.yaml \
+  k8s/ingress-traefik-v3-gateway-auth.yaml
+complete_phase "Fase 6 completa — endpoints auth disponibles en /auth/register, /auth/login y /auth/me"
 
 # ── Fase 7: Cart Service ─────────────────────────────────────────────────
-echo ">>> FASE 7: Build de imagen cart-service..."
-docker build -t cart-service:1.0 ./cart-service
+build_image "FASE 7: Build de imagen cart-service..." "cart-service:1.0" "./cart-service"
 echo "  ✅ Imagen cart-service construida"
 echo ""
 
-echo ">>> FASE 7: Desplegando cart-service + PostgreSQL..."
-kubectl apply -f cart-service/k8s/secrets.yaml
-kubectl apply -f cart-service/k8s/postgres.yaml
-kubectl apply -f cart-service/k8s/deployment.yaml
+print_section ">>> FASE 7: Desplegando cart-service + PostgreSQL..."
+apply_manifests \
+  cart-service/k8s/secrets.yaml \
+  cart-service/k8s/postgres.yaml \
+  cart-service/k8s/deployment.yaml
 # Aplica la nueva config de KrakenD que incluye los endpoints /api/cart/*
 kubectl apply -f krakend/k8s/krakend-config-v2.yaml
-kubectl rollout restart deployment krakend -n microservicios
-wait_pods
-echo "  ✅ Fase 7 completa — http://micro.local/api/cart/health"
-echo ""
+kubectl rollout restart deployment krakend -n "$NAMESPACE"
+complete_phase "Fase 7 completa — http://micro.local/api/cart/health"
 
 # ── Resumen ──────────────────────────────────────────────────────────────
 echo "╔══════════════════════════════════════════╗"
@@ -127,3 +146,5 @@ echo "  Perfil:     GET  http://micro.local/auth/me      (JWT requerido)"
 echo "  Cart:       GET  http://micro.local/api/cart         (JWT requerido)"
 echo "  Cart:       POST http://micro.local/api/cart/items   (JWT requerido)"
 echo ""
+
+print_hosts_notice

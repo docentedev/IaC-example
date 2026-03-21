@@ -13,7 +13,7 @@ WORKDIR /app
 
 # Copia primero manifiestos para aprovechar cache de capas.
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copia el codigo fuente y genera los estaticos en /app/dist.
 COPY . .

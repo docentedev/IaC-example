@@ -373,9 +373,22 @@ kubectl delete -f krakend/k8s/krakend-config.yaml     --ignore-not-found
 
 ### Limpieza Kubernetes (desde cero)
 
-Atajo recomendado (script que limpia todo):
+Atajo recomendado:
 ```bash
 bash scripts/teardown.sh
+```
+
+Comportamiento por defecto del script:
+- Elimina despliegues/ingress del laboratorio.
+- Conserva datos de Kubernetes (PVC y namespace) para redeploy rapido.
+- Conserva imagenes Docker y volumenes para redeploy rapido.
+
+Limpieza profunda opcional (solo si se indica por parametro):
+```bash
+bash scripts/teardown.sh --delete-images    # borra imagenes locales del laboratorio
+bash scripts/teardown.sh --delete-volumes   # borra volumenes Docker del laboratorio
+bash scripts/teardown.sh --delete-k8s-data  # borra datos persistentes en Kubernetes (PVC/namespace)
+bash scripts/teardown.sh --full-clean       # borra TODO: k8s data + imagenes + volumenes
 ```
 
 O manualmente:
@@ -420,7 +433,8 @@ Windows (PowerShell como Administrador):
 
 ```bash
 bash scripts/deploy-all.sh   # Despliega todo (k8s: 3 → 4 → 5 → 6)
-bash scripts/teardown.sh     # Limpia todo (Kubernetes + imágenes Docker)
+bash scripts/teardown.sh     # Baja servicios y conserva datos/imagenes para redeploy rapido
+bash scripts/teardown.sh --full-clean  # Limpieza total: Kubernetes (incluye PVC/namespace) + imagenes + volumenes
 ```
 
 ---

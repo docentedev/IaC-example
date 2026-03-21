@@ -10,15 +10,15 @@
 FROM node:20-alpine AS builder
 WORKDIR /workspace
 
-COPY package.json ./
-RUN npm install
+COPY package*.json ./
+RUN npm ci
 
 # Stage runner: contiene solo lo necesario para ejecutar el servicio.
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 COPY --from=builder /workspace/node_modules ./node_modules
-COPY package.json ./
+COPY package*.json ./
 COPY src/ ./src/
 
 EXPOSE 3002
